@@ -1,0 +1,6 @@
+# Std hidden files
+.*
+
+# Add back .gitignore
+!.gitignore
+!.git*
