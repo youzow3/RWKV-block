@@ -11,18 +11,21 @@ class RWKV5ChannelMix(torch.nn.Module):
     def __init__(self, configMap: RWKV5BlockConfigMap|any):
         super().__init__()
 
-        self.configMap = RWKV5BlockConfigMapNormalizer(configMap)
+        cMap:RWKV5BlockConfigMap = RWKV5BlockConfigMapNormalizer(configMap)
+        self.configMap = cMap
 
         # Get required props
-        n_embed = self.configMap.n_embed
-        n_layer = self.configMap.n_layer
+        n_embed = cMap.n_embed
+        n_layer = cMap.n_layer
 
         # Get optional props
-        dim_ffn = self.configMap.get_dim_ffn()
-        layer_id = self.configMap.get_layer_id(0)
-        device = self.configMap.get_device('cpu')
-        dtype = self.configMap.get_dtype('float')
+        dim_ffn = cMap.get_dim_ffn()
+        layer_id = cMap.get_layer_id(0)
+        device = cMap.get_device('cpu')
+        dtype = cMap.get_dtype('float')
 
+        # Build the various params
+        # ---
         with torch.no_grad():  # fancy init of time_mix
             ratio_1_to_almost0 = 1.0 - (layer_id / n_layer)  # 1 to ~0
             ddd = torch.ones(1, 1, n_embed)
@@ -41,11 +44,11 @@ class RWKV5ChannelMix(torch.nn.Module):
         
         Given:
         - Incoming token embedding size of shape [batch_size, seq_len, embedding_size]
-        - Last shift states of the various batches [batch_size, state_size]
+        - Incoming channel mix, shift states of the various batches [batch_size, state_size]
         
         Returns a pair 
-        - of output embedding of shape [batch_size, seq_len, embedding_size]
-        - and the last output state of shape [batch_size, state_size]
+        - Output embedding of shape [batch_size, seq_len, embedding_size]
+        - Output channel mix, shift state of shape [batch_size, state_size]
         '''
         # last_state = last_state.to(self.key.weight.device)
 
