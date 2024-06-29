@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 from torch import Tensor
+from typing import Union
 from torch.nn import functional as F
 
 from .rwkv5_block_config_map import RWKV5BlockConfigMap, RWKV5BlockConfigMapNormalizer
@@ -11,18 +12,18 @@ class RWKV5TimeMix(torch.nn.Module):
     Time Mix block for RWKV V5
     '''
 
-    def __init__(self, configMap: RWKV5BlockConfigMap|any):
+    def __init__(self, configMap: Union[RWKV5BlockConfigMap, any]):
         super().__init__()
 
         cMap:RWKV5BlockConfigMap = RWKV5BlockConfigMapNormalizer(configMap)
         self.configMap = cMap
 
         # Get required props
-        n_embed = cMap.n_embed
+        n_dim = cMap.n_dim
         n_layer = cMap.n_layer
 
         # Get optional props
-        dim_att = cMap.get_dim_att()
+        n_dim_att = cMap.get_n_dim_att()
         layer_id = cMap.get_layer_id(0)
         device = cMap.get_device('cpu')
         dtype = cMap.get_dtype('float')
@@ -43,9 +44,9 @@ class RWKV5TimeMix(torch.nn.Module):
         with torch.no_grad():
             ratio_0_to_1 = layer_id / (n_layer - 1)  # 0 to 1
             ratio_1_to_almost0 = 1.0 - (layer_id / n_layer)  # 1 to ~0
-            ddd = torch.ones(1, 1, n_embed, device=device, dtype=dtype)
-            for i in range(n_embed):
-                ddd[0, 0, i] = i / n_embed
+            ddd = torch.ones(1, 1, n_dim, device=device, dtype=dtype)
+            for i in range(n_dim):
+                ddd[0, 0, i] = i / n_dim
 
             # fancy time_mix
             self.time_mix_k = nn.Parameter(torch.pow(ddd, ratio_1_to_almost0))
@@ -54,27 +55,27 @@ class RWKV5TimeMix(torch.nn.Module):
             self.time_mix_g = nn.Parameter(torch.pow(ddd, 0.5 * ratio_1_to_almost0))
 
             # fancy time_decay
-            decay_speed = torch.ones(dim_att, device=device, dtype=dtype)
-            for n in range(dim_att):
-                decay_speed[n] = -6 + 5 * (n / (dim_att - 1)) ** (0.7 + 1.3 * ratio_0_to_1)
+            decay_speed = torch.ones(n_dim_att, device=device, dtype=dtype)
+            for n in range(n_dim_att):
+                decay_speed[n] = -6 + 5 * (n / (n_dim_att - 1)) ** (0.7 + 1.3 * ratio_0_to_1)
             self.time_decay = nn.Parameter(decay_speed.reshape(n_head, head_size))
             # print(layer_id, self.time_decay.flatten()[:3].cpu().numpy(), '...', self.time_decay.flatten()[-3:].cpu().numpy())
 
-            tmp = torch.zeros(dim_att, device=device, dtype=dtype)
-            for n in range(dim_att):
+            tmp = torch.zeros(n_dim_att, device=device, dtype=dtype)
+            for n in range(n_dim_att):
                 zigzag = ((n + 1) % 3 - 1) * 0.1
-                tmp[n] = ratio_0_to_1 * (1 - (n / (dim_att - 1))) + zigzag
+                tmp[n] = ratio_0_to_1 * (1 - (n / (n_dim_att - 1))) + zigzag
 
             self.time_faaaa = nn.Parameter(tmp.reshape(n_head, head_size))
 
         # self.time_shift = nn.ZeroPad2d((0, 0, 1, -1))
-        self.receptance = nn.Linear(n_embed, dim_att, bias=False, device=device, dtype=dtype)
-        self.key = nn.Linear(n_embed, dim_att, bias=False, device=device, dtype=dtype)
+        self.receptance = nn.Linear(n_dim, n_dim_att, bias=False, device=device, dtype=dtype)
+        self.key = nn.Linear(n_dim, n_dim_att, bias=False, device=device, dtype=dtype)
 
-        self.value = nn.Linear(n_embed, dim_att, bias=False, device=device, dtype=dtype)
-        self.output = nn.Linear(dim_att, n_embed, bias=False, device=device, dtype=dtype)
-        self.gate = nn.Linear(n_embed, dim_att, bias=False, device=device, dtype=dtype)
-        self.ln_x = nn.GroupNorm(n_head, dim_att, device=device, dtype=dtype)
+        self.value = nn.Linear(n_dim, n_dim_att, bias=False, device=device, dtype=dtype)
+        self.output = nn.Linear(n_dim_att, n_dim, bias=False, device=device, dtype=dtype)
+        self.gate = nn.Linear(n_dim, n_dim_att, bias=False, device=device, dtype=dtype)
+        self.ln_x = nn.GroupNorm(n_head, n_dim_att, device=device, dtype=dtype)
         
     def forward(self, x:Tensor, shift_state_in:Tensor, wkv_state_in:Tensor) -> tuple[Tensor,Tensor,Tensor]:
         '''
@@ -300,3 +301,24 @@ class RWKV5TimeMix(torch.nn.Module):
             out = out + (r * w_intra) @ states # BHNTV
             out = out.view(B,H,L,V)
             return out, kv_state
+    
+    def load_from_model_state_dict(self, state_dict: dict, layer_id:int, non_blocking:bool=True):
+        '''
+        Given the Full/partial RWKV model weights, loaded via `torch.load`
+        Setup the RWKV_TimeMix model weights, using the layer_id
+        '''
+        # copy_ the values over, instead of replacing the model weights
+        self.time_mix_k.data.copy_(state_dict[f"blocks.{layer_id}.att.time_mix_k"], non_blocking=non_blocking)
+        self.time_mix_v.data.copy_(state_dict[f"blocks.{layer_id}.att.time_mix_v"], non_blocking=non_blocking)
+        self.time_mix_r.data.copy_(state_dict[f"blocks.{layer_id}.att.time_mix_r"], non_blocking=non_blocking)
+        self.time_mix_g.data.copy_(state_dict[f"blocks.{layer_id}.att.time_mix_g"], non_blocking=non_blocking)
+        self.time_decay.data.copy_(state_dict[f"blocks.{layer_id}.att.time_decay"], non_blocking=non_blocking)
+        self.time_faaaa.data.copy_(state_dict[f"blocks.{layer_id}.att.time_faaaa"], non_blocking=non_blocking)
+
+        self.receptance.weight.data.copy_(state_dict[f"blocks.{layer_id}.att.receptance.weight"], non_blocking=non_blocking)
+        self.key.weight.data.copy_(state_dict[f"blocks.{layer_id}.att.key.weight"], non_blocking=non_blocking)
+        self.value.weight.data.copy_(state_dict[f"blocks.{layer_id}.att.value.weight"], non_blocking=non_blocking)
+        self.output.weight.data.copy_(state_dict[f"blocks.{layer_id}.att.output.weight"], non_blocking=non_blocking)
+        self.gate.weight.data.copy_(state_dict[f"blocks.{layer_id}.att.gate.weight"], non_blocking=non_blocking)
+        self.ln_x.weight.data.copy_(state_dict[f"blocks.{layer_id}.att.ln_x.weight"], non_blocking=non_blocking)
+        self.ln_x.bias.data.copy_(state_dict[f"blocks.{layer_id}.att.ln_x.bias"], non_blocking=non_blocking)

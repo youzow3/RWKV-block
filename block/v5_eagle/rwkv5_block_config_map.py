@@ -1,12 +1,14 @@
 from dataclasses import dataclass
 from typing import Optional
+from typing import Union
+import torch
 
 @dataclass
 class RWKV5BlockConfigMap:
     """Configuration map for RWKV based models"""
     # Key properties for the block / model
     n_layer: int
-    n_embed: int
+    n_dim: int
 
     head_size: int = 64
     head_size_divisor: int = 8
@@ -19,8 +21,8 @@ class RWKV5BlockConfigMap:
     # ---
 
     # Channel mix / FFN block dimension size
-    dim_ffn: Optional[int] = None,
-    dim_att: Optional[int] = None
+    n_dim_ffn: Optional[int] = None
+    n_dim_att: Optional[int] = None
 
     # Current layer_id of the block
     layer_id: Optional[int] = None
@@ -29,25 +31,27 @@ class RWKV5BlockConfigMap:
     n_head: Optional[int] = None
 
     # Device and Data type
-    device: Optional[str] = None
-    dtype: Optional[str] = None
+    device: Union[torch.device, str, None] = None
+    dtype: Union[torch.dtype, str, None] = None
 
     # ---
     # OPTIONAL PROPS FETCHER
     # ---
 
-    def get_dim_ffn(self) -> int:
+    def get_n_dim_ffn(self) -> int:
         '''
         Returns the dimension of feed forward network
         '''
-        if self.dim_ffn is not None:
-            dim_ffn = self.dim_ffn
+        if self.n_dim_ffn is not None:
+            n_dim_ffn = self.n_dim_ffn
         else:
-            n_embed = self.n_embed
-            assert n_embed  % 32 == 0, f"n_embed must be divisible by 32"
-            dim_ffn = int((self.n_embed * 3.5) // 32 * 32)
-        assert dim_ffn % 32 == 0, f"dim_att must be divisible by 32"
-        return dim_ffn
+            n_dim = self.n_dim
+            assert n_dim  % 32 == 0, f"n_dim must be divisible by 32"
+            n_dim_ffn = (self.n_dim * 3.5) // 32 * 32
+
+        n_dim_ffn = int(n_dim_ffn)
+        assert n_dim_ffn % 32 == 0, f"n_dim_att must be divisible by 32"
+        return n_dim_ffn
     
     def get_layer_id(self, fallback:int) -> int:
         '''
@@ -57,34 +61,44 @@ class RWKV5BlockConfigMap:
             return self.layer_id
         return fallback
     
-    def get_device(self, fallback:str) -> str:
+    def get_device(self, fallback:str) -> torch.device:
         '''
         Returns the device
         '''
         if self.device is not None:
-            return self.device
-        return fallback
+            return torch.device(self.device)
+        return torch.device(fallback)
     
-    def get_dtype(self, fallback:str) -> str:
+    def get_dtype(self, fallback:str) -> torch.dtype:
         '''
         Returns the dtype
         '''
         if self.dtype is not None:
-            return self.dtype
-        return fallback
+            key = self.dtype
+        else:
+            key = fallback
+
+        # if dtype is already torch.dtype
+        if isinstance(key, torch.dtype):
+            return key
+        
+        # Get and Check if the dtype is instance of torch.dtype
+        ret = getattr(torch, key) 
+        assert isinstance(ret, torch.dtype), f"Invalid dtype: {self.dtype}"
+        return ret
     
-    def get_dim_att(self) -> int:
+    def get_n_dim_att(self) -> int:
         '''
         Returns the dimension of attention
         '''
-        if self.dim_att is not None:
-            dim_att = self.dim_att
+        if self.n_dim_att is not None:
+            n_dim_att = self.n_dim_att
         else:
-            n_embed = self.n_embed
-            assert n_embed  % 32 == 0, f"n_embed must be divisible by 32"
-            dim_att = n_embed
-        assert dim_att % 32 == 0, f"dim_att must be divisible by 32 ({dim_att})"
-        return dim_att
+            n_dim = self.n_dim
+            assert n_dim  % 32 == 0, f"n_dim must be divisible by 32"
+            n_dim_att = n_dim
+        assert n_dim_att % 32 == 0, f"n_dim_att must be divisible by 32 ({n_dim_att})"
+        return n_dim_att
     
     def get_n_head(self) -> int:
         '''
@@ -93,14 +107,14 @@ class RWKV5BlockConfigMap:
         if self.n_head is not None:
             n_head = self.n_head
         else:
-            dim_att = self.get_dim_att()
-            n_head = self.get_dim_att() // self.head_size
-            assert dim_att % n_head == 0 ,  f"dim_att must be divisible by head_size ({self.head_size})"
+            n_dim_att = self.get_n_dim_att()
+            n_head = self.get_n_dim_att() // self.head_size
+            assert n_dim_att % n_head == 0 ,  f"n_dim_att must be divisible by head_size ({self.head_size})"
 
         return n_head
 
 
-def RWKV5BlockConfigMapNormalizer(config_map: any) -> RWKV5BlockConfigMap:
+def RWKV5BlockConfigMapNormalizer(config_map: Union[RWKV5BlockConfigMap, any]) -> RWKV5BlockConfigMap:
     '''
     Converts either maps, objs or RWKV5BlockConfigMap
     '''
