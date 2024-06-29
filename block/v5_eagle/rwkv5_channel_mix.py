@@ -76,6 +76,16 @@ class RWKV5ChannelMix(torch.nn.Module):
         # kv = self.value( torch.relu( self.key(xk) ) ** 2 )
         # return torch.sigmoid(self.receptance(xr)) * kv, x[:,-1]
 
+    @torch.compile(mode="default", fullgraph=True)
+    def forward_with_compile(self, in_x: torch.Tensor, in_state: torch.Tensor, out_x: torch.Tensor, out_state: torch.Tensor) -> tuple[torch.Tensor,torch.Tensor]:
+        '''
+        Compiled varient of the forward function
+        With no new tensors being created for the output
+        Useful for static memory allocation optimizations
+        '''
+        out_x[:], out_state[:] = self.forward(in_x, in_state)
+        return out_x, out_state
+
     def load_from_model_state_dict(self, state_dict: dict, layer_id:int, non_blocking:bool=True):
         '''
         Given the Full/partial RWKV model weights, loaded via `torch.load`
