@@ -13,6 +13,9 @@ class RWKV5BlockConfigMap:
     head_size: int = 64
     head_size_divisor: int = 8
 
+    # Dropout rate, should only be used in training
+    dropout_rate: float = 0.0
+
     # ---
     # OPTIONAL PROPS
     #
