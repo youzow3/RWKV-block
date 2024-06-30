@@ -1,0 +1,4 @@
+torch>=2.3.1
+torchaudio
+torchvision
+fla @ git+https://github.com/sustcsonglin/flash-linear-attention@98c176e
