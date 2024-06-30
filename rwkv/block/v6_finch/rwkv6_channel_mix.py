@@ -1,18 +1,18 @@
 import torch
 from torch import nn
 from typing import Union
-from .rwkv5_block_config_map import RWKV5BlockConfigMap
+from .rwkv6_block_config_map import RWKV6BlockConfigMap
 
-class RWKV5ChannelMix(torch.nn.Module):
+class RWKV6ChannelMix(torch.nn.Module):
     '''
     ChannelMix block for RWKV
     This is similar to transformer FFN block
     '''
 
-    def __init__(self, configMap: Union[RWKV5BlockConfigMap, any]):
+    def __init__(self, configMap: Union[RWKV6BlockConfigMap, any]):
         super().__init__()
 
-        cMap:RWKV5BlockConfigMap = RWKV5BlockConfigMap.normalize(configMap)
+        cMap:RWKV6BlockConfigMap = RWKV6BlockConfigMap.normalize(configMap)
         self.configMap = cMap
 
         # Get required props
@@ -80,7 +80,7 @@ class RWKV5ChannelMix(torch.nn.Module):
     def load_from_model_state_dict(self, state_dict: dict, layer_id:int, non_blocking:bool=True):
         '''
         Given the Full/partial RWKV model weights, loaded via `torch.load`
-        Setup the RWKV5ChannelMix model weights, using the layer_id
+        Setup the RWKV6ChannelMix model weights, using the layer_id
         '''
         # Copy the values from the state_dict
         self.time_maa_k.data.copy_(state_dict[f"blocks.{layer_id}.ffn.time_maa_k"], non_blocking=non_blocking)
