@@ -3,19 +3,19 @@ from torch import nn
 from torch import Tensor
 from typing import Union
 
-from .rwkv5_eagle_config_map import RWKV5EagleConfigMap
-from ..block.v5_eagle.rwkv5_layer_block import RWKV5LayerBlock
+from .rwkv6_finch_config_map import RWKV6FinchConfigMap
+from ..block.v6_finch.rwkv6_layer_block import RWKV6LayerBlock
 
-class RWKV5EagleModel(nn.Module):
+class RWKV6FinchModel(nn.Module):
     '''
-    RWKV5 Eagle Model architecture
+    RWKV6 Finch Model architecture
     Simplified implementation
     '''
 
-    def __init__(self, config: Union[RWKV5EagleConfigMap, any]):
+    def __init__(self, config: Union[RWKV6FinchConfigMap, any]):
         super().__init__()
 
-        cMap:RWKV5EagleConfigMap = RWKV5EagleConfigMap.normalize(config)
+        cMap:RWKV6FinchConfigMap = RWKV6FinchConfigMap.normalize(config)
         self.configMap = cMap
 
         # Get the required prop
@@ -31,7 +31,7 @@ class RWKV5EagleModel(nn.Module):
         # main block layers
         blockList = [None]*n_layer
         for i in range(n_layer):
-            blockList[i] = RWKV5LayerBlock(cMap.new_block_config_map(layer_id=i))
+            blockList[i] = RWKV6LayerBlock(cMap.new_block_config_map(layer_id=i))
         self.blocks = nn.ModuleList(blockList)
 
         # ln_out and head
@@ -164,7 +164,6 @@ class RWKV5EagleModel(nn.Module):
         # Return the output and the state list
         return x_emb, ret_stateList
     
-    @torch.compile(mode="default", fullgraph=True)
     def forward_with_compile(
         self, idx:torch.Tensor, 
         prv_stateList:list[tuple[torch.Tensor,torch.Tensor,torch.Tensor]],
@@ -175,24 +174,35 @@ class RWKV5EagleModel(nn.Module):
         With no new tensors being created for the output
         Useful for static memory allocation optimizations inference
         '''
+        out_emb, tmp_state = self._forward_with_reduce_compile(idx, prv_stateList)
+        for i in range(self.configMap.n_layer):
+            ret_stateList[i][0][:] = tmp_state[i][0]
+            ret_stateList[i][1][:] = tmp_state[i][1]
+            ret_stateList[i][2][:] = tmp_state[i][2]
+        return out_emb, ret_stateList
+
+    @torch.compile(mode="reduce-overhead", fullgraph=False)
+    def _forward_with_reduce_compile(
+        self, in_idx:torch.Tensor, 
+        prv_stateList:list[tuple[torch.Tensor,torch.Tensor,torch.Tensor]]
+    ) -> tuple[torch.Tensor,list[tuple[torch.Tensor,torch.Tensor,torch.Tensor]]]:
+        
         # Lets get the embedding
-        idx = idx.to(self.emb.weight.device, non_blocking=True)
+        idx = in_idx.to(self.emb.weight.device, non_blocking=True)
         x_emb = self.emb(idx)
 
+        # prepare the retstatelist
+        ret_stateList = [ None for i in range(self.configMap.n_layer) ]
+    
         # Iterate the block layers, compute the x embedding
         for i, block in enumerate(self.blocks):
             x_emb = x_emb.to(block.ln1.weight.device, non_blocking=True)
-            block.forward_with_compile(
-                x_emb, prv_stateList[i], x_emb, ret_stateList[i]
-            )
+            x_emb, ret_stateList[i] = block(x_emb, prv_stateList[i])
 
         # Final layer norm, and head
         x_emb = x_emb.to(self.ln_out.weight.device, non_blocking=True)
         x_emb = self.ln_out(x_emb)
-
-        # Due to large embeeding X size, 
-        # this cannot be preinit and compiled
-        out_emb = self.head(x_emb)
+        x_emb = self.head(x_emb)
 
         # Return the output and the state list
-        return out_emb, ret_stateList
+        return x_emb, ret_stateList
