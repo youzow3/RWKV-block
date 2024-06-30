@@ -120,14 +120,27 @@ class RWKV5BlockConfigMap:
     # Duplicator & Normalizer
     # ---
 
-    def get_new_config_map(self, **kwargs) -> 'RWKV5BlockConfigMap':
+    def new_block_config_map(self, **kwargs) -> 'RWKV5BlockConfigMap':
         '''
         Returns a new config map with updated values
         '''
-        return RWKV5BlockConfigMap(
-            **self.__dict__,
-            **kwargs
-        )
+
+        new_dict = {
+            "n_layer": self.n_layer,
+            "n_dim": self.n_dim,
+            "head_size": self.head_size,
+            "head_size_divisor": self.head_size_divisor,
+            "dropout_rate": self.dropout_rate,
+            "n_dim_ffn": self.n_dim_ffn,
+            "n_dim_att": self.n_dim_att,
+            "layer_id": self.layer_id,
+            "n_head": self.n_head,
+            "device": self.device,
+            "dtype": self.dtype,
+        }
+        new_dict.update(kwargs)
+
+        return RWKV5BlockConfigMap(**new_dict)
 
     @staticmethod
     def normalize(config_map: any) -> 'RWKV5BlockConfigMap':

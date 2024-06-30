@@ -31,7 +31,7 @@ class RWKV5EagleModel(nn.Module):
         # main block layers
         blockList = [None]*n_layer
         for i in range(n_layer):
-            blockList[i] = RWKV5LayerBlock(cMap.get_new_config_map(layer_id=i))
+            blockList[i] = RWKV5LayerBlock(cMap.new_block_config_map(layer_id=i))
         self.blocks = nn.ModuleList(blockList)
 
         # ln_out and head
@@ -167,7 +167,7 @@ class RWKV5EagleModel(nn.Module):
     @torch.compile(mode="default", fullgraph=True)
     def forward_with_compile(
         self, idx:torch.Tensor, 
-        prv_stateList:list[tuple[torch.Tensor,torch.Tensor,torch.Tensor]],  
+        prv_stateList:list[tuple[torch.Tensor,torch.Tensor,torch.Tensor]],
         ret_stateList:list[tuple[torch.Tensor,torch.Tensor,torch.Tensor]],
     ) -> tuple[torch.Tensor,list[tuple[torch.Tensor,torch.Tensor,torch.Tensor]]]:
         '''
@@ -189,7 +189,10 @@ class RWKV5EagleModel(nn.Module):
         # Final layer norm, and head
         x_emb = x_emb.to(self.ln_out.weight.device, non_blocking=True)
         x_emb = self.ln_out(x_emb)
-        x_emb = self.head(x_emb)
+
+        # Due to large embeeding X size, 
+        # this cannot be preinit and compiled
+        out_emb = self.head(x_emb)
 
         # Return the output and the state list
-        return x_emb, ret_stateList
+        return out_emb, ret_stateList
