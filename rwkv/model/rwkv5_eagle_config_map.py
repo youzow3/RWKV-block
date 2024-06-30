@@ -7,7 +7,6 @@ from ..block.v5_eagle.rwkv5_block_config_map import RWKV5BlockConfigMap
 
 @dataclass
 class RWKV5EagleConfigMap(RWKV5BlockConfigMap):
-
     n_vocab: int
     init_state_wkv: bool = False
 
