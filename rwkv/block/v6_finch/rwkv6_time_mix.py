@@ -155,14 +155,14 @@ class RWKV6TimeMix(torch.nn.Module):
 
         return x, shift_state_out, wkv_state_out
 
-    @torch.compile(mode="reduce-overhead", fullgraph=False)
+    # @torch.compile(mode="reduce-overhead", fullgraph=False)
     def forward_with_compile(self, in_x:Tensor, shift_state_in:Tensor, wkv_state_in:Tensor, out_x:Tensor, shift_state_out:Tensor, wkv_state_out:Tensor) -> tuple[Tensor,Tensor,Tensor]:
         '''
         Compiled varient of the forward function
         With no new tensors being created for the output
         Useful for static memory allocation optimizations inference
         '''
-        out_x[:], shift_state_out[:], wkv_state_out[:] = self.forward(in_x, shift_state_in, wkv_state_in)
+        out_x[:], shift_state_out[:], wkv_state_out[:] = self._forward_with_reduce_compile(in_x, shift_state_in, wkv_state_in)
         return out_x, shift_state_out, wkv_state_out
 
     @torch.compile(mode="reduce-overhead", fullgraph=False)
