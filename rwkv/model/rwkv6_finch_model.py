@@ -176,9 +176,12 @@ class RWKV6FinchModel(nn.Module):
         '''
         out_emb, tmp_state = self._forward_with_reduce_compile(idx, prv_stateList)
         for i in range(self.configMap.n_layer):
-            ret_stateList[i][0][:] = tmp_state[i][0]
-            ret_stateList[i][1][:] = tmp_state[i][1]
-            ret_stateList[i][2][:] = tmp_state[i][2]
+            # ret_stateList[i][0][:] = tmp_state[i][0]
+            # ret_stateList[i][1][:] = tmp_state[i][1]
+            # ret_stateList[i][2][:] = tmp_state[i][2]
+            ret_stateList[i][0].copy_(tmp_state[i][0], non_blocking=True)
+            ret_stateList[i][1].copy_(tmp_state[i][1], non_blocking=True)
+            ret_stateList[i][2].copy_(tmp_state[i][2], non_blocking=True)
         return out_emb, ret_stateList
 
     @torch.compile(mode="reduce-overhead", fullgraph=False)
