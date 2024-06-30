@@ -49,16 +49,16 @@ class RWKV5TimeMix(torch.nn.Module):
                 ddd[0, 0, i] = i / n_dim
 
             # fancy time_mix
-            self.time_mix_k = nn.Parameter(torch.pow(ddd, ratio_1_to_almost0))
-            self.time_mix_v = nn.Parameter(torch.pow(ddd, ratio_1_to_almost0) + 0.3 * ratio_0_to_1)
-            self.time_mix_r = nn.Parameter(torch.pow(ddd, 0.5 * ratio_1_to_almost0))
-            self.time_mix_g = nn.Parameter(torch.pow(ddd, 0.5 * ratio_1_to_almost0))
+            self.time_mix_k = nn.Parameter(torch.pow(ddd, ratio_1_to_almost0)).to(device, dtype=dtype)
+            self.time_mix_v = nn.Parameter(torch.pow(ddd, ratio_1_to_almost0) + 0.3 * ratio_0_to_1).to(device, dtype=dtype)
+            self.time_mix_r = nn.Parameter(torch.pow(ddd, 0.5 * ratio_1_to_almost0)).to(device, dtype=dtype)
+            self.time_mix_g = nn.Parameter(torch.pow(ddd, 0.5 * ratio_1_to_almost0)).to(device, dtype=dtype)
 
             # fancy time_decay
             decay_speed = torch.ones(n_dim_att, device=device, dtype=dtype)
             for n in range(n_dim_att):
                 decay_speed[n] = -6 + 5 * (n / (n_dim_att - 1)) ** (0.7 + 1.3 * ratio_0_to_1)
-            self.time_decay = nn.Parameter(decay_speed.reshape(n_head, head_size))
+            self.time_decay = nn.Parameter(decay_speed.reshape(n_head, head_size)).to(device, dtype=dtype)
             # print(layer_id, self.time_decay.flatten()[:3].cpu().numpy(), '...', self.time_decay.flatten()[-3:].cpu().numpy())
 
             tmp = torch.zeros(n_dim_att, device=device, dtype=dtype)
@@ -66,7 +66,7 @@ class RWKV5TimeMix(torch.nn.Module):
                 zigzag = ((n + 1) % 3 - 1) * 0.1
                 tmp[n] = ratio_0_to_1 * (1 - (n / (n_dim_att - 1))) + zigzag
 
-            self.time_faaaa = nn.Parameter(tmp.reshape(n_head, head_size))
+            self.time_faaaa = nn.Parameter(tmp.reshape(n_head, head_size)).to(device, dtype=dtype)
 
         # self.time_shift = nn.ZeroPad2d((0, 0, 1, -1))
         self.receptance = nn.Linear(n_dim, n_dim_att, bias=False, device=device, dtype=dtype)

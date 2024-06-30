@@ -47,6 +47,9 @@ class RWKV5EagleConfigMap(RWKV5BlockConfigMap):
             n_vocab=state_dict['emb.weight'].shape[0],
             init_state_wkv=hasattr(state_dict, 'init_state.0.wkv'),
 
+            n_head=state_dict['blocks.0.att.time_decay'].shape[0],
+            head_size=state_dict['blocks.0.att.time_decay'].shape[1],
+
             n_dim_att=state_dict['blocks.0.att.key.weight'].shape[0],
             n_dim_ffn=state_dict['blocks.0.ffn.key.weight'].shape[0],
 

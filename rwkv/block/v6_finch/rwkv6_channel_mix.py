@@ -66,16 +66,21 @@ class RWKV6ChannelMix(torch.nn.Module):
         kv = self.value(k)
         return torch.sigmoid(self.receptance(xr)) * kv, x[:,-1]
 
-
-    @torch.compile(mode="default", fullgraph=True)
     def forward_with_compile(self, in_x: torch.Tensor, in_state: torch.Tensor, out_x: torch.Tensor, out_state: torch.Tensor) -> tuple[torch.Tensor,torch.Tensor]:
         '''
         Compiled varient of the forward function
         With no new tensors being created for the output
         Useful for static memory allocation optimizations inference
         '''
-        out_x[:], out_state[:] = self.forward(in_x, in_state)
+        out_x[:], out_state[:] = self._forward_with_reduce_compile(in_x, in_state)
         return out_x, out_state
+
+    @torch.compile(mode="reduce-overhead", fullgraph=True)
+    def _forward_with_reduce_compile(self, in_x: torch.Tensor, in_state: torch.Tensor) -> tuple[torch.Tensor,torch.Tensor]:
+        '''
+        Compiled varient of the forward function
+        '''
+        return self.forward(in_x, in_state)
 
     def load_from_model_state_dict(self, state_dict: dict, layer_id:int, non_blocking:bool=True):
         '''
