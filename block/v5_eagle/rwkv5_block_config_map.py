@@ -116,18 +116,31 @@ class RWKV5BlockConfigMap:
 
         return n_head
 
+    # ---
+    # Duplicator & Normalizer
+    # ---
 
-def RWKV5BlockConfigMapNormalizer(config_map: Union[RWKV5BlockConfigMap, any]) -> RWKV5BlockConfigMap:
-    '''
-    Converts either maps, objs or RWKV5BlockConfigMap
-    '''
-    if isinstance(config_map, RWKV5BlockConfigMap):
-        return config_map
-    
-    if isinstance(config_map, dict):
-        return RWKV5BlockConfigMap(**config_map)
+    def get_new_config_map(self, **kwargs) -> 'RWKV5BlockConfigMap':
+        '''
+        Returns a new config map with updated values
+        '''
+        return RWKV5BlockConfigMap(
+            **self.__dict__,
+            **kwargs
+        )
 
-    if hasattr(config_map, '__dict__'):
-        return RWKV5BlockConfigMap(**config_map.__dict__)
-    
-    raise ValueError(f"Unsupported config_map type: {type(config_map)}")
+    @staticmethod
+    def normalize(config_map: any) -> 'RWKV5BlockConfigMap':
+        '''
+        Converts either maps, objs or RWKV5BlockConfigMap
+        '''
+        if isinstance(config_map, RWKV5BlockConfigMap):
+            return config_map
+        
+        if isinstance(config_map, dict):
+            return RWKV5BlockConfigMap(**config_map)
+
+        if hasattr(config_map, '__dict__'):
+            return RWKV5BlockConfigMap(**config_map.__dict__)
+        
+        raise ValueError(f"Unsupported config_map type: {type(config_map)}")

@@ -4,7 +4,7 @@ from torch import Tensor
 from typing import Union
 from torch.nn import functional as F
 
-from .rwkv5_block_config_map import RWKV5BlockConfigMap, RWKV5BlockConfigMapNormalizer
+from .rwkv5_block_config_map import RWKV5BlockConfigMap
 from .rwkv5_channel_mix import RWKV5ChannelMix
 from .rwkv5_time_mix import RWKV5TimeMix
 
@@ -16,7 +16,7 @@ class RWKV5LayerBlock(torch.nn.Module):
     def __init__(self, configMap: Union[RWKV5BlockConfigMap, any]):
         super().__init__()
 
-        cMap:RWKV5BlockConfigMap = RWKV5BlockConfigMapNormalizer(configMap)
+        cMap:RWKV5BlockConfigMap = RWKV5BlockConfigMap.normalize(configMap)
         self.configMap = cMap
 
         # Get required props

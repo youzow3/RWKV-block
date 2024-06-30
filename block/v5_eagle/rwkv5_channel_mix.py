@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 from typing import Union
-from .rwkv5_block_config_map import RWKV5BlockConfigMap, RWKV5BlockConfigMapNormalizer
+from .rwkv5_block_config_map import RWKV5BlockConfigMap
 
 class RWKV5ChannelMix(torch.nn.Module):
     '''
@@ -12,7 +12,7 @@ class RWKV5ChannelMix(torch.nn.Module):
     def __init__(self, configMap: Union[RWKV5BlockConfigMap, any]):
         super().__init__()
 
-        cMap:RWKV5BlockConfigMap = RWKV5BlockConfigMapNormalizer(configMap)
+        cMap:RWKV5BlockConfigMap = RWKV5BlockConfigMap.normalize(configMap)
         self.configMap = cMap
 
         # Get required props
