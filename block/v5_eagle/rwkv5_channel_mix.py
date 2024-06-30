@@ -81,7 +81,7 @@ class RWKV5ChannelMix(torch.nn.Module):
         '''
         Compiled varient of the forward function
         With no new tensors being created for the output
-        Useful for static memory allocation optimizations
+        Useful for static memory allocation optimizations inference
         '''
         out_x[:], out_state[:] = self.forward(in_x, in_state)
         return out_x, out_state

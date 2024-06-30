@@ -5,7 +5,7 @@ from typing import Union
 from torch.nn import functional as F
 
 from .rwkv5_block_config_map import RWKV5BlockConfigMap, RWKV5BlockConfigMapNormalizer
-from .rwkv5_optimized_ops import modified_lerp, timemix_inner
+from .rwkv5_optimized_ops import modified_lerp
 
 class RWKV5TimeMix(torch.nn.Module):
     '''
@@ -99,6 +99,17 @@ class RWKV5TimeMix(torch.nn.Module):
         # and prepare to do the inner loop
         x_chunk_len = x.size(-2)
 
+        # Shortcut for single token
+        # ---
+
+        if x_chunk_len == 1:
+            return self._forward_nocuda_optimized(x, shift_state_in, wkv_state_in)
+
+        if x_chunk_len == 0:
+            raise ValueError("Input chunk length cannot be zero")
+
+        # Variable size handling
+        # ---
         processed_len = 0
         remaining_len = x_chunk_len
         
@@ -118,7 +129,7 @@ class RWKV5TimeMix(torch.nn.Module):
         for bChunkSize in bChunkSize_arr:
             
             # Check if the remaining length is less than the chunk size
-            while remaining_len > bChunkSize:
+            while remaining_len >= bChunkSize:
                 # Get the multiple of bChunkSize
                 mul = remaining_len // bChunkSize
                 chunk_len = bChunkSize * mul
@@ -135,7 +146,23 @@ class RWKV5TimeMix(torch.nn.Module):
                 output_emb_arr.append(nxt_output_state)
 
         # Return the output state
-        return (torch.cat(output_emb_arr, dim=-2), cur_shift_state, cur_wkv_state)
+        return (torch.cat(output_emb_arr, dim=1), cur_shift_state, cur_wkv_state)
+
+    @torch.compile(mode="default", fullgraph=True)
+    def forward_with_compile(self, in_x:Tensor, shift_state_in:Tensor, wkv_state_in:Tensor, out_x:Tensor, shift_state_out:Tensor, wkv_state_out:Tensor) -> tuple[Tensor,Tensor,Tensor]:
+        '''
+        Compiled varient of the forward function
+        With no new tensors being created for the output
+        Useful for static memory allocation optimizations inference
+        '''
+        out_x[:], shift_state_out[:], wkv_state_out[:] = self.forward(in_x, shift_state_in, wkv_state_in)
+        return out_x, shift_state_out, wkv_state_out
+    
+    # ---------------------------------
+    #
+    #  TimeMix Inner Operations
+    #
+    # ---------------------------------
     
     # Highly optimized nocuda forward operations, bounded to specific multiples of wkv chunk lengths
     # This uses a pure pytorch implementation
@@ -301,6 +328,12 @@ class RWKV5TimeMix(torch.nn.Module):
             out = out + (r * w_intra) @ states # BHNTV
             out = out.view(B,H,L,V)
             return out, kv_state
+    
+    # ---------------------------------
+    #
+    #  Model state handling
+    #
+    # ---------------------------------
     
     def load_from_model_state_dict(self, state_dict: dict, layer_id:int, non_blocking:bool=True):
         '''
