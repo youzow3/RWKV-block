@@ -23,7 +23,7 @@ class RWKV5LayerBlock(torch.nn.Module):
         n_dim = cMap.n_dim
         layer_id = cMap.get_layer_id(-1)
         device = cMap.get_device('cpu')
-        dtype = cMap.get_dtype('float')
+        dtype = cMap.get_dtype('bfloat16')
         dropout_rate = cMap.dropout_rate
 
         # Validate the layer_id

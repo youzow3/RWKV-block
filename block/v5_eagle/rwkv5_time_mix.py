@@ -26,7 +26,7 @@ class RWKV5TimeMix(torch.nn.Module):
         n_dim_att = cMap.get_n_dim_att()
         layer_id = cMap.get_layer_id(0)
         device = cMap.get_device('cpu')
-        dtype = cMap.get_dtype('float')
+        dtype = cMap.get_dtype('bfloat16')
 
         n_head = cMap.get_n_head()
         head_size = cMap.head_size

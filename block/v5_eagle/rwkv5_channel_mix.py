@@ -23,7 +23,7 @@ class RWKV5ChannelMix(torch.nn.Module):
         n_dim_ffn = cMap.get_n_dim_ffn()
         layer_id = cMap.get_layer_id(0)
         device = cMap.get_device('cpu')
-        dtype = cMap.get_dtype('float')
+        dtype = cMap.get_dtype('bfloat16')
 
         # Build the various params
         # ---
