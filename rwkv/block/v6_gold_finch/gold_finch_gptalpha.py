@@ -36,87 +36,89 @@ class GPTAlpha_Tmix(nn.module):
         self.head_size = head_size
         self.head_size_divisor = head_size_divisor
 
-    # def __init__(self, args, layer_id, angles, bias_mask):
-    #     super().__init__()
-    #     self.args = args
-    #     self.layer_id = layer_id
-    #     self.n_layer = args.n_layer
+        with torch.no_grad():
+            ratio_0_to_1 = layer_id / (n_layer - 1)  # 0 to 1
+            ratio_1_to_almost0 = 1.0 - (layer_id / n_layer)  # 1 to ~0
+            ddd = torch.ones(1, 1, n_dim)
+            for i in range(n_dim):
+                ddd[0, 0, i] = i / n_dim
 
-    #     self.k_head_size = self.v_head_size = self.head_size = args.head_size_a
-    #     self.n_kv_head = self.n_head = args.dim_att // self.head_size
-    #     assert args.dim_att % self.n_head == 0
+            self.time_maa_x = nn.Parameter(1.0 - torch.pow(ddd, ratio_1_to_almost0)).to(device, dtype=dtype)
+            self.time_maa_r = nn.Parameter(1.0 - torch.pow(ddd, 0.5 * ratio_1_to_almost0)).to(device, dtype=dtype)
+            self.time_maa_k = nn.Parameter(1.0 - torch.pow(ddd, ratio_1_to_almost0)).to(device, dtype=dtype)
+            self.time_maa_v = nn.Parameter(1.0 - (torch.pow(ddd, ratio_1_to_almost0) + 0.3 * ratio_0_to_1)).to(device, dtype=dtype)
+            D_MIX_DIM = 32
+            self.time_maa_w1 = nn.Parameter(torch.zeros(n_dim, D_MIX_DIM*3)).to(device, dtype=dtype)
+            self.time_maa_w2 = nn.Parameter(torch.zeros(3, D_MIX_DIM, n_dim).uniform_(-0.01, 0.01)).to(device, dtype=dtype)
 
-    #     with torch.no_grad():
-    #         ratio_0_to_1 = layer_id / (args.n_layer - 1)  # 0 to 1
-    #         ratio_1_to_almost0 = 1.0 - (layer_id / args.n_layer)  # 1 to ~0
-    #         ddd = torch.ones(1, 1, args.n_embd)
-    #         for i in range(args.n_embd):
-    #             ddd[0, 0, i] = i / args.n_embd
+        self.query = nn.Linear(n_dim, n_dim_att, bias=False, device=device, dtype=dtype)
+        self.key = nn.Linear(n_dim, n_dim_att, bias=False, device=device, dtype=dtype)
+        self.value = nn.Linear(n_dim, n_dim_att, bias=False, device=device, dtype=dtype)
+        self.output = nn.Linear(n_dim_att, n_dim, bias=False, device=device, dtype=dtype)
+        self.ln_r = nn.LayerNorm(n_dim_att, device=device, dtype=dtype)
+        self.ln_k = nn.LayerNorm(n_dim_att, device=device, dtype=dtype)
+        self.ln_v = nn.LayerNorm(n_dim_att, device=device, dtype=dtype)
+        self.ln_x = nn.LayerNorm(n_dim_att, device=device, dtype=dtype)
 
-    #         self.time_maa_x = nn.Parameter(1.0 - torch.pow(ddd, ratio_1_to_almost0))
-    #         self.time_maa_r = nn.Parameter(1.0 - torch.pow(ddd, 0.5 * ratio_1_to_almost0))
-    #         self.time_maa_k = nn.Parameter(1.0 - torch.pow(ddd, ratio_1_to_almost0))
-    #         self.time_maa_v = nn.Parameter(1.0 - (torch.pow(ddd, ratio_1_to_almost0) + 0.3 * ratio_0_to_1))
-    #         D_MIX_LORA = 32
-    #         self.time_maa_w1 = nn.Parameter(torch.zeros(args.n_embd, D_MIX_LORA*3))
-    #         self.time_maa_w2 = nn.Parameter(torch.zeros(3, D_MIX_LORA, args.n_embd).uniform_(-0.01, 0.01))
 
-    #     self.query = nn.Linear(args.n_embd, args.dim_att, bias=False)
-    #     self.key = nn.Linear(args.n_embd, args.dim_att, bias=False)
-    #     self.value = nn.Linear(args.n_embd, args.dim_att, bias=False)
-    #     self.output = nn.Linear(args.dim_att, args.n_embd, bias=False)
-    #     self.ln_r = nn.LayerNorm(args.dim_att)
-    #     self.ln_k = nn.LayerNorm(args.dim_att)
-    #     self.ln_v = nn.LayerNorm(args.dim_att)
-    #     self.ln_x = nn.LayerNorm(args.dim_att)
-
-    #     self.angles = angles
-    #     self.bias_mask = bias_mask
-
-    # @MyFunction
-    # def forward(self, x, xo, kv_cache, last_time_mix_state:TimeMixState):
-    #     B, T, C = x.size()
-    #     H = self.n_head
-    #     K = C // H
-    #     V = C // H
-
-    #     shift_state = x[:, -1].clone()
-    #     dxprev = torch.concat((last_time_mix_state.shift_state.unsqueeze(1), x[:, :-1]), dim=1) - x
-
-    #     xxx = x + dxprev * self.time_maa_x
-
-    #     xxx = torch.tanh(xxx @ self.time_maa_w1).view(B*T, self.time_maa_w2.size(0), -1).transpose(0, 1)
-    #     xxx = torch.bmm(xxx, self.time_maa_w2).view(self.time_maa_w2.size(0), B, T, C)
-
-    #     mr, mk, mv = xxx.unbind(dim=0)
-    #     xq = x + dxprev * (self.time_maa_r + mr)
-    #     xk = x + dxprev * (self.time_maa_k + mk)
-    #     xv = x + dxprev * (self.time_maa_v + mv)
+    def forward(self, x:Tensor, shift_state_in:Tensor) -> tuple[Tensor,Tensor]:
+        '''
+        forwarding time mix given the model weights and the input tokens and states.
         
-    #     q = self.query(xq)
-    #     k = self.key(xk)
-    #     v = self.value(xv)
+        Given:
+        - Incoming token embedding size of shape [batch_size, seq_len, embedding_size]
+        - Incoming states containing of shape [
+            [batch_size, state_size] ## Token Shift state,
+        ]
         
-    #     q = self.ln_r(q)
-    #     k = self.ln_k(k)
-    #     v = self.ln_v(v)
+        Returns a pair 
+        - output embedding of shape [batch_size, seq_len, embedding_size]
+        - output state of shape [
+            [batch_size, state_size] ## Token Shift state,
+        ]
+        '''
+        # Get the sizing
+        BATCH_SIZE, SEQ_LEN, IN_EMB_SIZE = x.size()
+        N_HEAD = self.n_head
 
-    #     q = q.view(B,-1,H,K).transpose(1,2)
-    #     k = k.view(B,-1,H,K).transpose(1,2)
-    #     v = v.view(B,-1,H,V).transpose(1,2)
+        K = IN_EMB_SIZE // N_HEAD
+        V = IN_EMB_SIZE // N_HEAD
 
-    #     if self.angles is not None:
-    #         self.angles = self.angles.to(x.device)
-    #         q, k = apply_rotary_embedding(q, k, self.angles)
+        ##########
+        ## x060b2 - gptalpha
+        ##########
 
-    #     x = nn.functional.scaled_dot_product_attention(
-    #         q, k, v,
-    #         #attn_mask=self.bias_mask(lr), dropout_p=0.0, is_causal=self.bias_mask is None)
-    #         is_causal=True)
-    #     x = x.transpose(1,2).reshape(B,T,C)
+        shift_state = x[:, -1]
+        dxprev = torch.concat((shift_state_in.unsqueeze(1), x[:, :-1]), dim=1) - x
+
+        xxx = x + dxprev * self.time_maa_x
+        xxx = torch.tanh(xxx @ self.time_maa_w1).view(BATCH_SIZE*SEQ_LEN, self.time_maa_w2.size(0), -1).transpose(0, 1)
+        xxx = torch.bmm(xxx, self.time_maa_w2).view(self.time_maa_w2.size(0), BATCH_SIZE, SEQ_LEN, IN_EMB_SIZE)
+
+        mr, mk, mv = xxx.unbind(dim=0)
+        xq = x + dxprev * (self.time_maa_r + mr)
+        xk = x + dxprev * (self.time_maa_k + mk)
+        xv = x + dxprev * (self.time_maa_v + mv)
+        
+        q = self.query(xq)
+        k = self.key(xk)
+        v = self.value(xv)
+        
+        q = self.ln_r(q)
+        k = self.ln_k(k)
+        v = self.ln_v(v)
+
+        q = q.view(BATCH_SIZE,-1,N_HEAD,K).transpose(1,2)
+        k = k.view(BATCH_SIZE,-1,N_HEAD,K).transpose(1,2)
+        v = v.view(BATCH_SIZE,-1,N_HEAD,V).transpose(1,2)
+
+        x = nn.functional.scaled_dot_product_attention(
+            q, k, v,
+            #attn_mask=self.bias_mask(lr), dropout_p=0.0, is_causal=self.bias_mask is None)
+            is_causal=True)
+        x = x.transpose(1,2).reshape(BATCH_SIZE, SEQ_LEN, IN_EMB_SIZE)
        
-    #     x = self.ln_x(x)
+        x = self.ln_x(x)
+        x = self.output(x)
 
-    #     x = self.output(x)
-
-    #     return x, TimeMixState(last_time_mix_state.wkv_state, shift_state)
+        return x, shift_state

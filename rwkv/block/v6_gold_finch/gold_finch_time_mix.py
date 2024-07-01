@@ -121,7 +121,7 @@ class GoldFinchTimeMix(nn.Module):
         N_HEAD = self.n_head
 
         ##########
-        ## x060
+        ## x060b2
         ##########
 
         shift_state_out = x[:, -1]
