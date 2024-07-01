@@ -4,10 +4,10 @@ from torch import nn, Tensor
 import torch.nn.functional as F
 
 from .gold_finch_block_config_map import GoldFinchBlockConfigMap
-from .ops.rotary import generate_rotary_embedding, generate_binary_rotary_embedding, apply_rotary_embedding
-from .ops.norm import rms_norm
+# from .ops.rotary import generate_rotary_embedding, generate_binary_rotary_embedding, apply_rotary_embedding
+# from .ops.norm import rms_norm
 
-class GPTAlpha_Tmix(nn.module):
+class GoldFinchGptAlpha(nn.module):
     '''
     GPT Alpha block for RWKV V6 Gold Finch model
     '''
