@@ -7,7 +7,7 @@ from torch.nn import functional as F
 from .gold_finch_block_config_map import GoldFinchBlockConfigMap
 from ..v6_finch.rwkv6_fla_ops import RUN_RWKVx060_FLA
 
-class GoldFinchTimeMix(torch.nn.Module):
+class GoldFinchTimeMix(nn.Module):
     '''
     Time Mix block for RWKV V6 Gold Finch model
     '''
@@ -36,11 +36,11 @@ class GoldFinchTimeMix(torch.nn.Module):
         self.head_size = head_size
         self.head_size_divisor = head_size_divisor
 
-        # Some internal flags, to sort out
-        use_one_minus_w = True
-        use_gf_v2 = True
-        self.use_one_minus_w = use_one_minus_w
-        self.use_gf_v2 = use_gf_v2
+        # # Some internal flags, to sort out
+        # use_one_minus_w = True
+        # use_gf_v2 = True
+        # self.use_one_minus_w = use_one_minus_w
+        # self.use_gf_v2 = use_gf_v2
 
         # Build the various params
         # ---
@@ -84,7 +84,12 @@ class GoldFinchTimeMix(torch.nn.Module):
                 zigzag = ((n + 1) % 3 - 1) * 0.1
                 tmp[n] = ratio_0_to_1 * (1 - (n / (n_dim_att - 1))) + zigzag
 
-            self.time_faaaa = nn.Parameter(tmp.reshape(self.n_head, self.head_size)).to(device, dtype=dtype)
+            ori_time_faaaa = nn.Parameter(tmp.reshape(self.n_head, self.head_size)).to(device, dtype=dtype)
+            # if self.use_gf_v2:
+            self._zero_time_faaaa = torch.zeros_like(ori_time_faaaa).to(device, dtype=dtype)
+            self._zero_time_faaaa.requires_grad = False
+            # else:
+            #   self.time_faaaa = ori_time_faaaa
 
         self.receptance = nn.Linear(n_dim, n_dim_att, bias=False, device=device, dtype=dtype)
         self.key = nn.Linear(n_dim, n_dim_att, bias=False, device=device, dtype=dtype)
@@ -139,18 +144,18 @@ class GoldFinchTimeMix(torch.nn.Module):
         v2 = self.value(xv2) + torch.tanh(xv2 @ self.time_value2_w1) @ self.time_value2_w2
         w = self.time_decay + torch.tanh(xw @ self.time_decay_w1) @ self.time_decay_w2
 
-        if self.use_one_minus_w:
-            k = k * (1 - (-w.exp()).exp())
+        # if self.use_one_minus_w:
+        k = k * (1 - (-w.exp()).exp())
         
-        if self.use_gf_v2:
-            u = torch.zeros_like(self.time_faaaa)
-        else:
-            u = self.time_faaaa
+        # if self.use_gf_v2:
+        u = self._zero_time_faaaa
+        # else:
+        #     u = self.time_faaaa
 
         y, wkv_state_out = RUN_RWKVx060_FLA(BATCH_SIZE, SEQ_LEN, IN_EMB_SIZE, N_HEAD, r, k, v, w, u, wkv_state_in)
         
-        if self.use_gf_v2:
-            y = y + v2
+        # if self.use_gf_v2:
+        y = y + v2
 
         y = self.ln_x(y)
         y = self.output(y)
@@ -203,8 +208,9 @@ class GoldFinchTimeMix(torch.nn.Module):
 
         self.time_value2_w1.data.copy_(state_dict[f"blocks.{layer_id}.att.time_value2_w1"], non_blocking=non_blocking)
         self.time_value2_w2.data.copy_(state_dict[f"blocks.{layer_id}.att.time_value2_w2"], non_blocking=non_blocking)
-
-        self.time_faaaa.data.copy_(state_dict[f"blocks.{layer_id}.att.time_faaaa"], non_blocking=non_blocking)
+        
+        # if self.use_gf_v2 == false:
+        #   self.time_faaaa.data.copy_(state_dict[f"blocks.{layer_id}.att.time_faaaa"], non_blocking=non_blocking)
 
         self.receptance.weight.data.copy_(state_dict[f"blocks.{layer_id}.att.receptance.weight"], non_blocking=non_blocking)
         self.key.weight.data.copy_(state_dict[f"blocks.{layer_id}.att.key.weight"], non_blocking=non_blocking)
