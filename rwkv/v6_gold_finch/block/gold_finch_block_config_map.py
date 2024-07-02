@@ -20,6 +20,10 @@ class GoldFinchBlockConfigMap:
     # Implementation backend to use
     tmix_backend: str = "auto"
 
+    # Block attention type
+    # Its either x060 or x060b2 or gptalpha_goco
+    att_type: str = "x060"
+
     # ---
     # OPTIONAL PROPS
     #
@@ -141,6 +145,8 @@ class GoldFinchBlockConfigMap:
             "n_head": self.n_head,
             "device": self.device,
             "dtype": self.dtype,
+            "tmix_backend": self.tmix_backend,
+            "att_type": self.att_type,
         }
         new_dict.update(kwargs)
 

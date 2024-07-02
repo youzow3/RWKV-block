@@ -7,7 +7,7 @@ from .gold_finch_block_config_map import GoldFinchBlockConfigMap
 from .ops.rotary import apply_rotary_embedding # generate_rotary_embedding, generate_binary_rotary_embedding, 
 from .ops.norm import rms_norm 
 
-class GoldFinchGptAlphaGoco(nn.module):
+class GoldFinchGPTAlphaGoCo(nn.module):
     '''
     GPT Alpha block for RWKV V6 Gold Finch model GOCO varient
     '''
@@ -72,21 +72,19 @@ class GoldFinchGptAlphaGoco(nn.module):
         # timeshifting util
         self.time_shift = nn.ZeroPad2d((0, 0, 1, -1))
 
-    def forward(self, x:Tensor, xo:Tensor, k_cache:Tensor, shift_state_in:Tensor) -> tuple[Tensor,Tensor]:
+    def forward(self, x:Tensor, shift_state_in:Tensor, xo:Tensor, k_cache:Tensor) -> tuple[Tensor,Tensor]:
         '''
-        forwarding time mix given the model weights and the input tokens and states.
+        forwarding gptalpha given the model weights and the input tokens and states.
         
         Given:
         - Incoming token embedding size of shape [batch_size, seq_len, embedding_size]
-        - Incoming states containing of shape [
-            [batch_size, state_size] ## Token Shift state,
-        ]
-        
+        - Incoming shift state of shape [batch_size, state_size]
+        - x_original_cache
+        - kv_cache
+
         Returns a pair 
         - output embedding of shape [batch_size, seq_len, embedding_size]
-        - output state of shape [
-            [batch_size, state_size] ## Token Shift state,
-        ]
+        - output shift state of shape [batch_size, state_size]
         '''
         # Get the sizing
         BATCH_SIZE, SEQ_LEN, IN_EMB_SIZE = x.size()
@@ -94,6 +92,9 @@ class GoldFinchGptAlphaGoco(nn.module):
 
         K = IN_EMB_SIZE // N_HEAD
         V = IN_EMB_SIZE // N_HEAD
+
+        assert xo is not None
+        assert k_cache is not None
 
         ##########
         ## x060b2 - gptalpha goco
