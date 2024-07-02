@@ -164,6 +164,7 @@ class RWKV6FinchModel(nn.Module):
         # Return the output and the state list
         return x_emb, ret_stateList
     
+    @torch.compile(mode="default")
     def forward_with_default_compile(
         self, idx:torch.Tensor, 
         prv_stateList:list[tuple[torch.Tensor,torch.Tensor,torch.Tensor]],
@@ -174,38 +175,15 @@ class RWKV6FinchModel(nn.Module):
         With no new tensors being created for the output
         Useful for static memory allocation optimizations inference
         '''
-        out_emb, tmp_state = self._forward_with_reduce_compile(idx, prv_stateList)
-        for i in range(self.configMap.n_layer):
-            # ret_stateList[i][0][:] = tmp_state[i][0]
-            # ret_stateList[i][1][:] = tmp_state[i][1]
-            # ret_stateList[i][2][:] = tmp_state[i][2]
-            ret_stateList[i][0].copy_(tmp_state[i][0], non_blocking=True)
-            ret_stateList[i][1].copy_(tmp_state[i][1], non_blocking=True)
-            ret_stateList[i][2].copy_(tmp_state[i][2], non_blocking=True)
-        return out_emb, ret_stateList
+        return self._forward_internal(idx, prv_stateList, ret_stateList, overwrite_ret_tensor=True)
 
-    @torch.compile(mode="reduce-overhead", fullgraph=False)
-    def _forward_with_reduce_compile(
+    @torch.compile(mode="reduce-overhead")
+    def forward_with_reduce_compile(
         self, in_idx:torch.Tensor, 
         prv_stateList:list[tuple[torch.Tensor,torch.Tensor,torch.Tensor]]
     ) -> tuple[torch.Tensor,list[tuple[torch.Tensor,torch.Tensor,torch.Tensor]]]:
-        
-        # Lets get the embedding
-        idx = in_idx.to(self.emb.weight.device, non_blocking=True)
-        x_emb = self.emb(idx)
-
         # prepare the retstatelist
         ret_stateList = [ None for i in range(self.configMap.n_layer) ]
     
-        # Iterate the block layers, compute the x embedding
-        for i, block in enumerate(self.blocks):
-            x_emb = x_emb.to(block.ln1.weight.device, non_blocking=True)
-            x_emb, ret_stateList[i] = block(x_emb, prv_stateList[i])
-
-        # Final layer norm, and head
-        x_emb = x_emb.to(self.ln_out.weight.device, non_blocking=True)
-        x_emb = self.ln_out(x_emb)
-        x_emb = self.head(x_emb)
-
-        # Return the output and the state list
-        return x_emb, ret_stateList
+        # Forward internally
+        return self._forward_internal(in_idx, prv_stateList, ret_stateList, overwrite_ret_tensor=False)

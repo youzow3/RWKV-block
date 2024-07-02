@@ -37,7 +37,8 @@ def RWKVx060_chunk(
             backend = 'fla'
 
     if backend == 'fla':
-        return RWKVx060_chunk_fla(r,k,v,w,u,wkv_state)
+        x, s = RWKVx060_chunk_fla(r.float(),k.float(),v.float(),w.float(),u.float(),wkv_state.float())
+        return x.bfloat16(), s.bfloat16()
     elif backend == 'torch':
         return RWKVx060_chunk_torch(r,k,v,w,u,wkv_state)
     else:
@@ -49,7 +50,7 @@ def RWKVx060_reshape_run(
         # Inbound request tensors
         r:Tensor,k:Tensor,v:Tensor,w:Tensor,u:Tensor,in_wkv_state:Tensor,
         # Operator backend type to use
-        backend:str='pytorch'
+        backend:str='auto'
     ):
     '''
     Highly optimized RWKV inner opperations, used within the TimeMix module
@@ -67,7 +68,7 @@ def RWKVx060_reshape_run(
         k = k.view(B,T,H,-1).transpose(1,2).float()
         v = v.view(B,T,H,-1).transpose(1,2).float()
         w = -torch.exp(w.view(B,T,H,-1).transpose(1,2).float())
-        o, out_wkv_state = RWKVx060_chunk_fla(r, k, v, w, u=u.float(), initial_state=in_wkv_state.float(), scale=1, output_final_state=True)
+        o, out_wkv_state = RWKVx060_chunk_fla(r, k, v, w, u=u.float(), wkv_state=in_wkv_state.float(), scale=1, output_final_state=True)
         return o.bfloat16().transpose(1,2).reshape(B,T,C), out_wkv_state.bfloat16()
     elif backend == 'torch':
         r = r.view(B,T,H,-1).transpose(1,2)

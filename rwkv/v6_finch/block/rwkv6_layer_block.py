@@ -93,7 +93,7 @@ class RWKV6LayerBlock(torch.nn.Module):
         
         return x, (tmix_shift, tmix_wkv, ffn_state)
     
-    # @torch.compile(mode="reduce-overhead", fullgraph=False)
+    @torch.compile(mode="default")
     def forward_with_default_compile(
         self, 
         in_x:torch.Tensor, 
@@ -106,12 +106,12 @@ class RWKV6LayerBlock(torch.nn.Module):
         With no new tensors being created for the output
         Useful for static memory allocation optimizations inference
         '''
-        out_x[:], tmp_state = self._forward_with_reduce_compile(in_x, in_state)
+        out_x[:], tmp_state = self.forward(in_x, in_state)
         out_state[0][:], out_state[1][:], out_state[2][:] = tmp_state
         return out_x, out_state
 
-    @torch.compile(mode="reduce-overhead", fullgraph=False)
-    def _forward_with_reduce_compile(self, in_x: torch.Tensor, in_state: tuple[torch.Tensor,torch.Tensor,torch.Tensor]) -> tuple[torch.Tensor,torch.Tensor]:
+    @torch.compile(mode="reduce-overhead")
+    def forward_with_reduce_compile(self, in_x: torch.Tensor, in_state: tuple[torch.Tensor,torch.Tensor,torch.Tensor]) -> tuple[torch.Tensor,torch.Tensor]:
         '''
         Compiled varient of the forward function
         '''

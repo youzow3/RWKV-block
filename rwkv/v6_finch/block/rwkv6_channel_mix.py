@@ -72,11 +72,11 @@ class RWKV6ChannelMix(torch.nn.Module):
         With no new tensors being created for the output
         Useful for static memory allocation optimizations inference
         '''
-        out_x[:], out_state[:] = self._forward_with_reduce_compile(in_x, in_state)
+        out_x[:], out_state[:] = self.forward_with_reduce_compile(in_x, in_state)
         return out_x, out_state
 
     @torch.compile(mode="reduce-overhead", fullgraph=True)
-    def _forward_with_reduce_compile(self, in_x: torch.Tensor, in_state: torch.Tensor) -> tuple[torch.Tensor,torch.Tensor]:
+    def forward_with_reduce_compile(self, in_x: torch.Tensor, in_state: torch.Tensor) -> tuple[torch.Tensor,torch.Tensor]:
         '''
         Compiled varient of the forward function
         '''

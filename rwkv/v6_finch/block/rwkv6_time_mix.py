@@ -5,7 +5,7 @@ from typing import Union
 from torch.nn import functional as F
 
 from .rwkv6_block_config_map import RWKV6BlockConfigMap
-from .rwkv6_fla_ops import RUN_RWKVx060_FLA
+from ...v5_eagle.block.rwkv5_optimized_ops import RWKVx060_chunk, RWKVx060_reshape_run
 
 class RWKV6TimeMix(torch.nn.Module):
     '''
@@ -35,6 +35,7 @@ class RWKV6TimeMix(torch.nn.Module):
         self.n_head = n_head
         self.head_size = head_size
         self.head_size_divisor = head_size_divisor
+        self.tmix_backend = cMap.tmix_backend
 
         # Build the various params
         # ---
@@ -133,7 +134,7 @@ class RWKV6TimeMix(torch.nn.Module):
         w = (self.time_decay + torch.tanh(xw @ self.time_decay_w1) @ self.time_decay_w2).to(r.dtype)
         u = self.time_faaaa
 
-        x, wkv_state_out = RUN_RWKVx060_FLA(BATCH_SIZE, SEQ_LEN, IN_EMB_SIZE, N_HEAD, r, k, v, w, u, wkv_state_in)
+        x, wkv_state_out = RWKVx060_reshape_run(BATCH_SIZE, SEQ_LEN, IN_EMB_SIZE, N_HEAD, r, k, v, w, u, wkv_state_in, backend=self.tmix_backend)
         x = x.view(BATCH_SIZE * SEQ_LEN, IN_EMB_SIZE)
 
         x = self.ln_x(x).view(BATCH_SIZE, SEQ_LEN, IN_EMB_SIZE)
@@ -141,20 +142,22 @@ class RWKV6TimeMix(torch.nn.Module):
 
         return x, shift_state_out, wkv_state_out
 
-    # @torch.compile(mode="reduce-overhead", fullgraph=False)
+    @torch.compile(mode="default")
     def forward_with_default_compile(self, in_x:Tensor, shift_state_in:Tensor, wkv_state_in:Tensor, out_x:Tensor, shift_state_out:Tensor, wkv_state_out:Tensor) -> tuple[Tensor,Tensor,Tensor]:
         '''
         Compiled varient of the forward function
         With no new tensors being created for the output
         Useful for static memory allocation optimizations inference
         '''
-        out_x[:], shift_state_out[:], wkv_state_out[:] = self._forward_with_reduce_compile(in_x, shift_state_in, wkv_state_in)
+        out_x[:], shift_state_out[:], wkv_state_out[:] = self.forward(in_x, shift_state_in, wkv_state_in)
         return out_x, shift_state_out, wkv_state_out
 
-    @torch.compile(mode="reduce-overhead", fullgraph=False)
-    def _forward_with_reduce_compile(self, in_x:Tensor, shift_state_in:Tensor, wkv_state_in:Tensor) -> tuple[Tensor,Tensor,Tensor]:
+    @torch.compile(mode="reduce-overhead")
+    def forward_with_reduce_compile(self, in_x:Tensor, shift_state_in:Tensor, wkv_state_in:Tensor) -> tuple[Tensor,Tensor,Tensor]:
         '''
         Compiled varient of the forward function
+        With no input tensor being modified. 
+        Useful for reduce-overhead compile mode
         '''
         return self.forward(in_x, shift_state_in, wkv_state_in)
     
