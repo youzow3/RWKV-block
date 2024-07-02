@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+from torch import Tensor
 from typing import Union
 from .rwkv5_block_config_map import RWKV5BlockConfigMap
 
@@ -39,7 +40,7 @@ class RWKV5ChannelMix(torch.nn.Module):
         self.receptance = nn.Linear(n_dim, n_dim, bias=False, device=device, dtype=dtype)
         self.value = nn.Linear(n_dim_ffn, n_dim, bias=False, device=device, dtype=dtype)
 
-    def forward(self, x: torch.Tensor, last_state: torch.Tensor) -> tuple[torch.Tensor,torch.Tensor]:
+    def forward(self, x: Tensor, last_state: Tensor) -> tuple[Tensor,Tensor]:
         '''
         Forwarding channel mix given the input tokens and states.
         
@@ -77,7 +78,7 @@ class RWKV5ChannelMix(torch.nn.Module):
         # return torch.sigmoid(self.receptance(xr)) * kv, x[:,-1]
 
     @torch.compile(mode="default", fullgraph=True)
-    def forward_with_default_compile(self, in_x: torch.Tensor, in_state: torch.Tensor, out_x: torch.Tensor, out_state: torch.Tensor) -> tuple[torch.Tensor,torch.Tensor]:
+    def forward_with_default_compile(self, in_x: Tensor, in_state: Tensor, out_x: Tensor, out_state: Tensor) -> tuple[Tensor,Tensor]:
         '''
         Compiled varient of the forward function
         With no new tensors being created for the output
@@ -86,6 +87,15 @@ class RWKV5ChannelMix(torch.nn.Module):
         out_x[:], out_state[:] = self.forward(in_x, in_state)
         return out_x, out_state
 
+    @torch.compile(mode="reduce-overhead", fullgraph=True)
+    def forward_with_reduce_compile(self, x: Tensor, last_state: Tensor) -> tuple[Tensor,Tensor]:
+        '''
+        Compiled varient of the forward function
+        With no input tensor being modified. 
+        Useful for reduce-overhead compile mode
+        '''
+        return self.forward(x, last_state)
+    
     def load_from_model_state_dict(self, state_dict: dict, layer_id:int, non_blocking:bool=True):
         '''
         Given the Full/partial RWKV model weights, loaded via `torch.load`

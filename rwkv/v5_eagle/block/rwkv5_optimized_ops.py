@@ -30,7 +30,13 @@ def RWKVx060_chunk(
     Highly optimized RWKV inner opperations, used within the TimeMix module
     With support for different implementations (torch, fla, etc)
     '''
-    if backend == 'fla' or backend == 'auto':
+    if backend == 'auto':
+        if r.device.type == 'cpu' or r.device.type == 'mps':
+            backend = 'torch'
+        else:
+            backend = 'fla'
+
+    if backend == 'fla':
         return RWKVx060_chunk_fla(r,k,v,w,u,wkv_state)
     elif backend == 'torch':
         return RWKVx060_chunk_torch(r,k,v,w,u,wkv_state)
@@ -50,7 +56,13 @@ def RWKVx060_reshape_run(
     When being passed while reshaping the format tensors 
     (with the B, T, C, H values: Batch size, token/time, C, H)
     '''
-    if backend == 'fla' or backend == 'auto':
+    if backend == 'auto':
+        if r.device.type == 'cpu' or r.device.type == 'mps':
+            backend = 'torch'
+        else:
+            backend = 'fla'
+
+    if backend == 'fla':
         r = r.view(B,T,H,-1).transpose(1,2).float()
         k = k.view(B,T,H,-1).transpose(1,2).float()
         v = v.view(B,T,H,-1).transpose(1,2).float()

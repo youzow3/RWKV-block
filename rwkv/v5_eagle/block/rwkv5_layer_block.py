@@ -93,7 +93,7 @@ class RWKV5LayerBlock(torch.nn.Module):
         
         return x, (tmix_shift, tmix_wkv, ffn_state)
     
-    @torch.compile(mode="default", fullgraph=True)
+    @torch.compile(mode="default")
     def forward_with_default_compile(
         self, 
         in_x:torch.Tensor, 
@@ -109,6 +109,18 @@ class RWKV5LayerBlock(torch.nn.Module):
         out_x[:], tmp_state = self.forward(in_x, in_state)
         out_state[0][:], out_state[1][:], out_state[2][:] = tmp_state
         return out_x, out_state
+
+    @torch.compile(mode="reduce-overhead")
+    def forward_with_reduce_compile(
+        self, x:torch.Tensor, 
+        last_state: tuple[torch.Tensor,torch.Tensor,torch.Tensor]
+        ) -> tuple[torch.Tensor,tuple[torch.Tensor,torch.Tensor,torch.Tensor]]:
+        '''
+        Compiled varient of the forward function
+        With no input tensor being modified.
+        Useful for reduce-overhead compile mode
+        '''
+        return self.forward(x, last_state)
 
     def load_from_model_state_dict(self, state_dict:dict, layer_id:int=-1, non_blocking:bool=True):
         '''

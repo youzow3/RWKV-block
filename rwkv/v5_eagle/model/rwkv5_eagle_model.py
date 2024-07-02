@@ -164,7 +164,7 @@ class RWKV5EagleModel(nn.Module):
         # Return the output and the state list
         return x_emb, ret_stateList
     
-    @torch.compile(mode="default", fullgraph=True)
+    @torch.compile(mode="default")
     def forward_with_default_compile(
         self, idx:torch.Tensor, 
         prv_stateList:list[tuple[torch.Tensor,torch.Tensor,torch.Tensor]],
@@ -196,3 +196,15 @@ class RWKV5EagleModel(nn.Module):
 
         # Return the output and the state list
         return out_emb, ret_stateList
+
+    @torch.compile(mode="reduce-overhead")
+    def forward_with_reduce_compile(
+        self, idx:torch.Tensor, 
+        prv_stateList:list[tuple[torch.Tensor,torch.Tensor,torch.Tensor]] = None,  
+    ) -> tuple[torch.Tensor,list[tuple[torch.Tensor,torch.Tensor,torch.Tensor]]]:
+        '''
+        Compiled varient of the forward function
+        With no input tensor being modified.
+        Useful for reduce-overhead compile mode
+        '''
+        return self.forward(idx, prv_stateList, prv_stateList)
