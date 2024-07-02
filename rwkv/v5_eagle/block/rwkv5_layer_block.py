@@ -94,7 +94,7 @@ class RWKV5LayerBlock(torch.nn.Module):
         return x, (tmix_shift, tmix_wkv, ffn_state)
     
     @torch.compile(mode="default", fullgraph=True)
-    def forward_with_compile(
+    def forward_with_default_compile(
         self, 
         in_x:torch.Tensor, 
         in_state: tuple[torch.Tensor,torch.Tensor,torch.Tensor],

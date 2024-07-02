@@ -164,7 +164,7 @@ class RWKV6FinchModel(nn.Module):
         # Return the output and the state list
         return x_emb, ret_stateList
     
-    def forward_with_compile(
+    def forward_with_default_compile(
         self, idx:torch.Tensor, 
         prv_stateList:list[tuple[torch.Tensor,torch.Tensor,torch.Tensor]],
         ret_stateList:list[tuple[torch.Tensor,torch.Tensor,torch.Tensor]],

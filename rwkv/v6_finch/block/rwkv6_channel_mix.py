@@ -66,7 +66,7 @@ class RWKV6ChannelMix(torch.nn.Module):
         kv = self.value(k)
         return torch.sigmoid(self.receptance(xr)) * kv, x[:,-1]
 
-    def forward_with_compile(self, in_x: torch.Tensor, in_state: torch.Tensor, out_x: torch.Tensor, out_state: torch.Tensor) -> tuple[torch.Tensor,torch.Tensor]:
+    def forward_with_default_compile(self, in_x: torch.Tensor, in_state: torch.Tensor, out_x: torch.Tensor, out_state: torch.Tensor) -> tuple[torch.Tensor,torch.Tensor]:
         '''
         Compiled varient of the forward function
         With no new tensors being created for the output

@@ -165,7 +165,7 @@ class RWKV5EagleModel(nn.Module):
         return x_emb, ret_stateList
     
     @torch.compile(mode="default", fullgraph=True)
-    def forward_with_compile(
+    def forward_with_default_compile(
         self, idx:torch.Tensor, 
         prv_stateList:list[tuple[torch.Tensor,torch.Tensor,torch.Tensor]],
         ret_stateList:list[tuple[torch.Tensor,torch.Tensor,torch.Tensor]],
@@ -182,7 +182,7 @@ class RWKV5EagleModel(nn.Module):
         # Iterate the block layers, compute the x embedding
         for i, block in enumerate(self.blocks):
             x_emb = x_emb.to(block.ln1.weight.device, non_blocking=True)
-            block.forward_with_compile(
+            block.forward_with_default_compile(
                 x_emb, prv_stateList[i], x_emb, ret_stateList[i]
             )
 
