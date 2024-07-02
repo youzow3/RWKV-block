@@ -5,7 +5,7 @@ from typing import Union
 from torch.nn import functional as F
 
 from .rwkv5_block_config_map import RWKV5BlockConfigMap
-from .rwkv5_optimized_ops import modified_lerp, RWKVx060_rechunk_pytorch
+from .rwkv5_optimized_ops import modified_lerp, RWKVx060_chunk
 
 class RWKV5TimeMix(torch.nn.Module):
     '''
@@ -35,6 +35,7 @@ class RWKV5TimeMix(torch.nn.Module):
         self.n_head = n_head
         self.head_size = head_size
         self.head_size_divisor = head_size_divisor
+        self.tmix_backend = cMap.tmix_backend
 
         # Build the various params
         # ---
@@ -131,7 +132,7 @@ class RWKV5TimeMix(torch.nn.Module):
         wkv_state_out = wkv_state_in.to(r.dtype)
 
         # RWKVx060 optimized kernels
-        x_logits, wkv_state_out = RWKVx060_rechunk_pytorch(r, k, v, w, u, wkv_state_out) 
+        x_logits, wkv_state_out = RWKVx060_chunk(r, k, v, w, u, wkv_state_out, backend=self.tmix_backend) 
         x_logits = x_logits.transpose(1,2).reshape(B,T,C)
 
         # Reshape and normalize the logits
@@ -142,7 +143,7 @@ class RWKV5TimeMix(torch.nn.Module):
         # Return the logits and the state
         return (x_logits, shift_state_out, wkv_state_out)
 
-    @torch.compile(mode="default", fullgraph=True)
+    @torch.compile(mode="default")
     def forward_with_default_compile(self, in_x:Tensor, shift_state_in:Tensor, wkv_state_in:Tensor, out_x:Tensor, shift_state_out:Tensor, wkv_state_out:Tensor) -> tuple[Tensor,Tensor,Tensor]:
         '''
         Compiled varient of the forward function
@@ -151,6 +152,15 @@ class RWKV5TimeMix(torch.nn.Module):
         '''
         out_x[:], shift_state_out[:], wkv_state_out[:] = self.forward(in_x, shift_state_in, wkv_state_in)
         return out_x, shift_state_out, wkv_state_out
+    
+    @torch.compile(mode="reduce-overhead")
+    def forward_with_reduce_compile(self, in_x:Tensor, shift_state_in:Tensor, wkv_state_in:Tensor) -> tuple[Tensor,Tensor,Tensor]:
+        '''
+        Compiled varient of the forward function
+        With no input tensor being modified. 
+        Useful for reduce-overhead compile mode
+        '''
+        return self.forward(in_x, shift_state_in, wkv_state_in)
     
     # ---------------------------------
     #

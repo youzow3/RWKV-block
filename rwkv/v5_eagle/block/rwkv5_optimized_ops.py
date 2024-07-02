@@ -1,5 +1,5 @@
-# 
-# Random collection of optimized operations used within the RWKV v5 implementation.
+# ---
+# Collection of optimized operations used within the RWKV v5 implementation.
 # ---
 
 import torch
@@ -16,7 +16,66 @@ def modified_lerp(start_mul, start, weight):
     '''
     return start_mul * start + weight * (1 - start)
 
-def RWKVx060_rechunk_pytorch(r,k,v,w,u,wkv_state)->tuple[Tensor,Tensor]:
+# ---
+# RWKVx060_chunk implementation, with support for different backends
+# ---
+
+def RWKVx060_chunk(
+        # Inbound request tensors
+        r:Tensor,k:Tensor,v:Tensor,w:Tensor,u:Tensor,wkv_state:Tensor,
+        # Operator backend type to use
+        backend:str='auto'
+    )->tuple[Tensor,Tensor]:
+    '''
+    Highly optimized RWKV inner opperations, used within the TimeMix module
+    With support for different implementations (torch, fla, etc)
+    '''
+    if backend == 'fla' or backend == 'auto':
+        return RWKVx060_chunk_fla(r,k,v,w,u,wkv_state)
+    elif backend == 'torch':
+        return RWKVx060_chunk_torch(r,k,v,w,u,wkv_state)
+    else:
+        raise ValueError(f"Unsupported backend type: {backend}")
+
+def RWKVx060_reshape_run(
+        # Request shapes
+        B:int, T:int, C:int, H:int, 
+        # Inbound request tensors
+        r:Tensor,k:Tensor,v:Tensor,w:Tensor,u:Tensor,in_wkv_state:Tensor,
+        # Operator backend type to use
+        backend:str='pytorch'
+    ):
+    '''
+    Highly optimized RWKV inner opperations, used within the TimeMix module
+    When being passed while reshaping the format tensors 
+    (with the B, T, C, H values: Batch size, token/time, C, H)
+    '''
+    if backend == 'fla' or backend == 'auto':
+        r = r.view(B,T,H,-1).transpose(1,2).float()
+        k = k.view(B,T,H,-1).transpose(1,2).float()
+        v = v.view(B,T,H,-1).transpose(1,2).float()
+        w = -torch.exp(w.view(B,T,H,-1).transpose(1,2).float())
+        o, out_wkv_state = RWKVx060_chunk_fla(r, k, v, w, u=u.float(), initial_state=in_wkv_state.float(), scale=1, output_final_state=True)
+        return o.bfloat16().transpose(1,2).reshape(B,T,C), out_wkv_state.bfloat16()
+    elif backend == 'torch':
+        r = r.view(B,T,H,-1).transpose(1,2)
+        k = k.view(B,T,H,-1).transpose(1,2)
+        v = v.view(B,T,H,-1).transpose(1,2)
+        w = -torch.exp(w.view(B,T,H,-1).transpose(1,2))
+        o, out_wkv_state = RWKVx060_chunk_torch(r, k, v, w, u, in_wkv_state)
+        return o.transpose(1,2).reshape(B,T,C), out_wkv_state
+    else:
+        raise ValueError(f"Unsupported backend type: {backend}")
+
+
+# ---
+# RWKVx060_chunk pytorch backend
+# ---
+
+def RWKVx060_chunk_torch(
+        # Inbound request tensors
+        r:Tensor,k:Tensor,v:Tensor,w:Tensor,u:Tensor,wkv_state:Tensor
+    )->tuple[Tensor,Tensor]:
     '''
     Highly optimized RWKV inner opperations, used within the TimeMix module
     This was made by @SmerkyG for supporting RWKV v5 in a pure pytorch manner
@@ -58,7 +117,7 @@ def RWKVx060_rechunk_pytorch(r,k,v,w,u,wkv_state)->tuple[Tensor,Tensor]:
             chunk_len = bChunkSize * mul
 
             # Call the subchunk operation
-            out, nxt_wkv_state = RWKVx060_subchunk_pytorch(
+            out, nxt_wkv_state = RWKVx060_subchunk_torch(
                 r[:, :, processed_len:processed_len+chunk_len, :],
                 k[:, :, processed_len:processed_len+chunk_len, :],
                 v[:, :, processed_len:processed_len+chunk_len, :],
@@ -79,7 +138,7 @@ def RWKVx060_rechunk_pytorch(r,k,v,w,u,wkv_state)->tuple[Tensor,Tensor]:
     out = torch.cat(out_arr, dim=2)
     return out, nxt_wkv_state
 
-def RWKVx060_subchunk_pytorch(
+def RWKVx060_subchunk_torch(
         # Inbound request tensors
         r:Tensor,k:Tensor,v:Tensor,w:Tensor,u:Tensor,wkv_state:Tensor,
         # Chunk size and precision
@@ -94,9 +153,9 @@ def RWKVx060_subchunk_pytorch(
     And that the chunk length needs to be a multiple of 2
     '''
     B,H,L,K = k.size()
-    return RWKVx060_subchunk_pytorch_inner(B,H,L,K, r,k,v,w,u,wkv_state,chunk_len,precision)
+    return RWKVx060_subchunk_torch_inner(B,H,L,K, r,k,v,w,u,wkv_state,chunk_len,precision)
 
-def RWKVx060_subchunk_pytorch_inner(
+def RWKVx060_subchunk_torch_inner(
         # Inbound request shapes
         B:int,H:int,L:int,K:int, 
         # Inbound request tensors
@@ -229,3 +288,29 @@ def RWKVx060_subchunk_pytorch_inner(
         # print(f"(out) wkv_state.shape: {wkv_state.shape}")
 
         return out, wkv_state
+
+# ---
+# RWKVx060_chunk FLA backend
+# ---
+
+# The empty fla_chunk_rwkv6 operator cache
+global _RWKVx060_chunk_fla_operator
+_RWKVx060_chunk_fla_operator = None
+
+@torch.compiler.disable
+def RWKVx060_chunk_fla(
+        # Inbound request tensors
+        r:Tensor,k:Tensor,v:Tensor,w:Tensor,u:Tensor,wkv_state:Tensor,
+        # Optional parameters
+        scale=1,output_final_state=True
+    ):
+    '''
+    Run the RWKVx060 chunk operation.
+    Note this is currently not pytorch compiler friendly sadly
+    '''
+    global _RWKVx060_chunk_fla_operator
+    if _RWKVx060_chunk_fla_operator is None:
+        from fla.ops.rwkv6 import chunk_rwkv6
+        _RWKVx060_chunk_fla_operator = chunk_rwkv6
+
+    return _RWKVx060_chunk_fla_operator(r, k, v, w, u=u, scale=scale, initial_state=wkv_state, output_final_state=output_final_state)
