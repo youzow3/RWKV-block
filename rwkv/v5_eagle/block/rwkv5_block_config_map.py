@@ -140,6 +140,7 @@ class RWKV5BlockConfigMap:
             "n_head": self.n_head,
             "device": self.device,
             "dtype": self.dtype,
+            "tmix_backend": self.tmix_backend,
         }
         new_dict.update(kwargs)
 

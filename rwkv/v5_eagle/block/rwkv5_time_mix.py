@@ -84,17 +84,17 @@ class RWKV5TimeMix(torch.nn.Module):
         
         Given:
         - Incoming token embedding size of shape [batch_size, seq_len, embedding_size]
-        - Incoming states containing of shape [
+        - Incoming states containing of shapes:
             [batch_size, state_size] ## Token Shift state,
             [batch_size, n_head, head_size, head_size] ## WKV state
-        ]
+        
         
         Returns a pair 
         - output embedding of shape [batch_size, seq_len, embedding_size]
-        - output state of shape [
+        - output state of shapes:
             [batch_size, state_size] ## Token Shift state,
             [batch_size, n_head, head_size, head_size] ## WKV state
-        ]
+        
         '''
 
         # Get the shift state
