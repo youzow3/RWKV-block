@@ -5,7 +5,7 @@ from typing import Union
 from torch.nn import functional as F
 
 from .rwkv6_block_config_map import RWKV6BlockConfigMap
-from ...v5_eagle.block.rwkv5_optimized_ops import RWKVx060_chunk
+from ...v5_eagle.block.rwkv5_optimized_ops import RWKVx060_reshape_run
 
 class RWKV6TimeMixB2(nn.Module):
     '''
@@ -155,7 +155,7 @@ class RWKV6TimeMixB2(nn.Module):
         # else:
         #     u = self.time_faaaa
 
-        y, wkv_state_out = RWKVx060_chunk(BATCH_SIZE, SEQ_LEN, IN_EMB_SIZE, N_HEAD, r, k, v, w, u, wkv_state_in, self.tmix_backend)
+        y, wkv_state_out = RWKVx060_reshape_run(BATCH_SIZE, SEQ_LEN, IN_EMB_SIZE, N_HEAD, r, k, v, w, u, wkv_state_in, self.tmix_backend)
         
         # if self.use_gf_v2:
         y = y + v2
