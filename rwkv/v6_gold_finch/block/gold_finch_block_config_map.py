@@ -17,6 +17,9 @@ class GoldFinchBlockConfigMap:
     # Dropout rate, should only be used in training
     dropout_rate: float = 0.0
 
+    # Implementation backend to use
+    tmix_backend: str = "auto"
+
     # ---
     # OPTIONAL PROPS
     #

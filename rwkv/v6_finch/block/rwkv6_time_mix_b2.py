@@ -4,18 +4,18 @@ from torch import Tensor
 from typing import Union
 from torch.nn import functional as F
 
-from .gold_finch_block_config_map import GoldFinchBlockConfigMap
-from ..v6_finch.rwkv6_fla_ops import RUN_RWKVx060_FLA
+from .rwkv6_block_config_map import RWKV6BlockConfigMap
+from ...v5_eagle.block.rwkv5_optimized_ops import RWKVx060_chunk
 
-class GoldFinchTimeMix(nn.Module):
+class RWKV6TimeMixB2(nn.Module):
     '''
-    Time Mix block for RWKV V6 Gold Finch model
+    Time Mix block for RWKV V6 x060b2
     '''
 
-    def __init__(self, configMap: Union[GoldFinchBlockConfigMap, any]):
+    def __init__(self, configMap: Union[RWKV6BlockConfigMap, any]):
         super().__init__()
 
-        cMap:GoldFinchBlockConfigMap = GoldFinchBlockConfigMap.normalize(configMap)
+        cMap:RWKV6BlockConfigMap = RWKV6BlockConfigMap.normalize(configMap)
         self.configMap = cMap
 
         # Get required props
@@ -35,6 +35,7 @@ class GoldFinchTimeMix(nn.Module):
         self.n_head = n_head
         self.head_size = head_size
         self.head_size_divisor = head_size_divisor
+        self.tmix_backend = cMap.tmix_backend
 
         # # Some internal flags, to sort out
         # use_one_minus_w = True
@@ -152,7 +153,7 @@ class GoldFinchTimeMix(nn.Module):
         # else:
         #     u = self.time_faaaa
 
-        y, wkv_state_out = RUN_RWKVx060_FLA(BATCH_SIZE, SEQ_LEN, IN_EMB_SIZE, N_HEAD, r, k, v, w, u, wkv_state_in)
+        y, wkv_state_out = RWKVx060_chunk(BATCH_SIZE, SEQ_LEN, IN_EMB_SIZE, N_HEAD, r, k, v, w, u, wkv_state_in, self.tmix_backend)
         
         # if self.use_gf_v2:
         y = y + v2
@@ -169,11 +170,11 @@ class GoldFinchTimeMix(nn.Module):
         With no new tensors being created for the output
         Useful for static memory allocation optimizations inference
         '''
-        out_x[:], shift_state_out[:], wkv_state_out[:] = self._forward_with_reduce_compile(in_x, shift_state_in, wkv_state_in)
+        out_x[:], shift_state_out[:], wkv_state_out[:] = self.forward_with_reduce_compile(in_x, shift_state_in, wkv_state_in)
         return out_x, shift_state_out, wkv_state_out
 
     @torch.compile(mode="reduce-overhead", fullgraph=False)
-    def _forward_with_reduce_compile(self, in_x:Tensor, shift_state_in:Tensor, wkv_state_in:Tensor) -> tuple[Tensor,Tensor,Tensor]:
+    def forward_with_reduce_compile(self, in_x:Tensor, shift_state_in:Tensor, wkv_state_in:Tensor) -> tuple[Tensor,Tensor,Tensor]:
         '''
         Compiled varient of the forward function
         '''
