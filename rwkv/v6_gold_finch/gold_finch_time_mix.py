@@ -76,8 +76,8 @@ class GoldFinchTimeMix(nn.Module):
             self.time_decay_w1 = nn.Parameter(torch.zeros(n_dim, D_DECAY_DIM)).to(device, dtype=dtype)
             self.time_decay_w2 = nn.Parameter(torch.zeros(D_DECAY_DIM, n_dim_att).uniform_(-0.01, 0.01)).to(device, dtype=dtype)
 
-            self.time_value2_w1 = nn.Parameter(torch.zeros(n_dim, D_DECAY_DIM))
-            self.time_value2_w2 = nn.Parameter(torch.zeros(D_DECAY_DIM, n_dim_att).uniform_(-0.01, 0.01))
+            self.time_value2_w1 = nn.Parameter(torch.zeros(n_dim, D_DECAY_DIM)).to(device, dtype=dtype)
+            self.time_value2_w2 = nn.Parameter(torch.zeros(D_DECAY_DIM, n_dim_att).uniform_(-0.01, 0.01)).to(device, dtype=dtype)
 
             tmp = torch.zeros(n_dim_att)
             for n in range(n_dim_att):

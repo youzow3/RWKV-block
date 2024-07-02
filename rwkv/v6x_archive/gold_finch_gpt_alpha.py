@@ -3,7 +3,7 @@ import torch, math
 from torch import nn, Tensor
 import torch.nn.functional as F
 
-from .gold_finch_block_config_map import GoldFinchBlockConfigMap
+from ..v6_gold_finch.gold_finch_block_config_map import GoldFinchBlockConfigMap
 # from .ops.rotary import generate_rotary_embedding, generate_binary_rotary_embedding, apply_rotary_embedding
 # from .ops.norm import rms_norm
 
