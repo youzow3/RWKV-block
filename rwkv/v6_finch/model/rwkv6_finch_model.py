@@ -4,7 +4,7 @@ from torch import Tensor
 from typing import Union
 
 from .rwkv6_finch_config_map import RWKV6FinchConfigMap
-from ..block.v6_finch.rwkv6_layer_block import RWKV6LayerBlock
+from ..block.rwkv6_layer_block import RWKV6LayerBlock
 
 class RWKV6FinchModel(nn.Module):
     '''
