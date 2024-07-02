@@ -10,6 +10,8 @@ from ...v5_eagle.block.rwkv5_optimized_ops import RWKVx060_chunk
 class RWKV6TimeMixB2(nn.Module):
     '''
     Time Mix block for RWKV V6 x060b2
+    A varient based on the RWKV V6 x060 original TimeMix block
+    This is used in various experimental models, and goldfinch
     '''
 
     def __init__(self, configMap: Union[RWKV6BlockConfigMap, any]):

@@ -144,7 +144,7 @@ class GoldFinchGptAlphaGoco(nn.module):
 
         x = nn.functional.scaled_dot_product_attention(q,k,v,is_causal=q.size(-2)>1)
 
-        x = x.transpose(1,2).reshape(B,-1,C)
+        x = x.transpose(1,2).reshape(BATCH_SIZE,-1,IN_EMB_SIZE)
        
         x = self.ln_x(x)
         #x = F.layer_norm(x.float(), self.ln_x.normalized_shape, self.ln_x.weight.float(), self.ln_x.bias.float()).to(x.dtype)
