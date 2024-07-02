@@ -3,7 +3,7 @@ from typing import Optional
 from typing import Union
 import torch
 
-from ..block.v5_eagle.rwkv5_block_config_map import RWKV5BlockConfigMap
+from ..block.rwkv5_block_config_map import RWKV5BlockConfigMap
 
 @dataclass
 class RWKV5EagleConfigMap(RWKV5BlockConfigMap):

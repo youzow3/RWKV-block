@@ -4,7 +4,7 @@ from torch import Tensor
 from typing import Union
 
 from .rwkv5_eagle_config_map import RWKV5EagleConfigMap
-from ..block.v5_eagle.rwkv5_layer_block import RWKV5LayerBlock
+from ..block.rwkv5_layer_block import RWKV5LayerBlock
 
 class RWKV5EagleModel(nn.Module):
     '''
