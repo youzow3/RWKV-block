@@ -10,9 +10,9 @@ from ...v6_finch.block.rwkv6_time_mix import RWKV6TimeMix
 from ...v6_finch.block.rwkv6_time_mix_b2 import RWKV6TimeMixB2
 from .gold_finch_gpt_alpha_goco import GoldFinchGPTAlphaGoCo
 
-class RWKV6LayerBlock(torch.nn.Module):
+class GoldFinchLayerBlock(nn.Module):
     '''
-    layer block for RWKV V6
+    layer block for Gold Finch
     '''
 
     def __init__(self, configMap: Union[GoldFinchBlockConfigMap, any]):
@@ -119,45 +119,51 @@ class RWKV6LayerBlock(torch.nn.Module):
         # return with block state
         return x, (tmix_shift, tmix_wkv, ffn_state)
     
-    # @torch.compile(mode="default")
-    # def forward_with_default_compile(
-    #     self, 
-    #     in_x:Tensor, 
-    #     in_state: tuple[Tensor,Tensor,Tensor],
-    #     out_x:Tensor, 
-    #     out_state: tuple[Tensor,Tensor,Tensor]
-    #     ) -> tuple[Tensor,tuple[Tensor,Tensor,Tensor]]:
-    #     '''
-    #     Compiled varient of the forward function
-    #     With no new tensors being created for the output
-    #     Useful for static memory allocation optimizations inference
-    #     '''
-    #     out_x[:], tmp_state = self.forward(in_x, in_state)
-    #     out_state[0][:], out_state[1][:], out_state[2][:] = tmp_state
-    #     return out_x, out_state
+    @torch.compile(mode="default")
+    def forward_with_default_compile(
+        self, 
+        in_x:Tensor, 
+        in_state: tuple[Tensor,Tensor,Tensor],
+        out_x:Tensor, 
+        out_state: tuple[Tensor,Tensor,Tensor]
+        ) -> tuple[Tensor,tuple[Tensor,Tensor,Tensor]]:
+        '''
+        Compiled varient of the forward function
+        With no new tensors being created for the output
+        Useful for static memory allocation optimizations inference
+        '''
+        out_x[:], tmp_state = self.forward(in_x, in_state)
+        out_state[0][:], out_state[1][:], out_state[2][:] = tmp_state
+        return out_x, out_state
 
-    # @torch.compile(mode="reduce-overhead")
-    # def forward_with_reduce_compile(self, in_x: Tensor, in_state: tuple[Tensor,Tensor,Tensor]) -> tuple[Tensor,Tensor]:
-    #     '''
-    #     Compiled varient of the forward function
-    #     '''
-    #     return self.forward(in_x, in_state)
+    @torch.compile(mode="reduce-overhead")
+    def forward_with_reduce_compile(
+            self, in_x: Tensor, in_state: tuple[Tensor,Tensor,Tensor],
+            x_original_cache:Tensor = None, kv_cache:Tensor = None
+        ) -> tuple[Tensor,Tensor]:
+        '''
+        Compiled varient of the forward function
+        '''
+        return self.forward(in_x, in_state)
     
-    # def load_from_model_state_dict(self, state_dict:dict, layer_id:int=-1, non_blocking:bool=True):
-    #     '''
-    #     Given the Full/partial RWKV model weights, load the block weights accordingly
-    #     '''
-    #     if layer_id == -1:
-    #         layer_id = self.configMap.get_layer_id(1)
+    def load_from_model_state_dict(
+            self, state_dict:dict, layer_id:int=-1, non_blocking:bool=True,
+            x_original_cache:Tensor = None, kv_cache:Tensor = None
+        ):
+        '''
+        Given the Full/partial RWKV model weights, load the block weights accordingly
+        '''
+        if layer_id == -1:
+            layer_id = self.configMap.get_layer_id(1)
             
-    #     if layer_id == 0:
-    #         self.ln0.weight.data.copy_(state_dict[f"blocks.{layer_id}.ln0.weight"], non_blocking=non_blocking)
-    #         self.ln0.bias.data.copy_(state_dict[f"blocks.{layer_id}.ln0.bias"], non_blocking=non_blocking)
+        if layer_id == 0:
+            self.ln0.weight.data.copy_(state_dict[f"blocks.{layer_id}.ln0.weight"], non_blocking=non_blocking)
+            self.ln0.bias.data.copy_(state_dict[f"blocks.{layer_id}.ln0.bias"], non_blocking=non_blocking)
 
-    #     self.ln1.weight.data.copy_(state_dict[f"blocks.{layer_id}.ln1.weight"], non_blocking=non_blocking)
-    #     self.ln1.bias.data.copy_(state_dict[f"blocks.{layer_id}.ln1.bias"], non_blocking=non_blocking)
-    #     self.ln2.weight.data.copy_(state_dict[f"blocks.{layer_id}.ln2.weight"], non_blocking=non_blocking)
-    #     self.ln2.bias.data.copy_(state_dict[f"blocks.{layer_id}.ln2.bias"], non_blocking=non_blocking)
+        self.ln1.weight.data.copy_(state_dict[f"blocks.{layer_id}.ln1.weight"], non_blocking=non_blocking)
+        self.ln1.bias.data.copy_(state_dict[f"blocks.{layer_id}.ln1.bias"], non_blocking=non_blocking)
+        self.ln2.weight.data.copy_(state_dict[f"blocks.{layer_id}.ln2.weight"], non_blocking=non_blocking)
+        self.ln2.bias.data.copy_(state_dict[f"blocks.{layer_id}.ln2.bias"], non_blocking=non_blocking)
 
-    #     self.att.load_from_model_state_dict(state_dict, layer_id, non_blocking=non_blocking)
-    #     self.ffn.load_from_model_state_dict(state_dict, layer_id, non_blocking=non_blocking)
+        self.att.load_from_model_state_dict(state_dict, layer_id, non_blocking=non_blocking)
+        self.ffn.load_from_model_state_dict(state_dict, layer_id, non_blocking=non_blocking)

@@ -7,7 +7,7 @@ from .gold_finch_block_config_map import GoldFinchBlockConfigMap
 from .ops.rotary import apply_rotary_embedding # generate_rotary_embedding, generate_binary_rotary_embedding, 
 from .ops.norm import rms_norm 
 
-class GoldFinchGPTAlphaGoCo(nn.module):
+class GoldFinchGPTAlphaGoCo(nn.Module):
     '''
     GPT Alpha block for RWKV V6 Gold Finch model GOCO varient
     '''

@@ -133,21 +133,10 @@ class GoldFinchBlockConfigMap:
         Returns a new config map with updated values
         '''
 
-        new_dict = {
-            "n_layer": self.n_layer,
-            "n_dim": self.n_dim,
-            "head_size": self.head_size,
-            "head_size_divisor": self.head_size_divisor,
-            "dropout_rate": self.dropout_rate,
-            "n_dim_ffn": self.n_dim_ffn,
-            "n_dim_att": self.n_dim_att,
-            "layer_id": self.layer_id,
-            "n_head": self.n_head,
-            "device": self.device,
-            "dtype": self.dtype,
-            "tmix_backend": self.tmix_backend,
-            "att_type": self.att_type,
-        }
+        new_dict = {}
+        for key in GoldFinchBlockConfigMap.__dataclass_fields__:
+            if key in self:
+                new_dict[key] = self[key]
         new_dict.update(kwargs)
 
         return GoldFinchBlockConfigMap(**new_dict)
@@ -160,10 +149,18 @@ class GoldFinchBlockConfigMap:
         if isinstance(config_map, GoldFinchBlockConfigMap):
             return config_map
         
+        dict_obj = None
         if isinstance(config_map, dict):
-            return GoldFinchBlockConfigMap(**config_map)
-
-        if hasattr(config_map, '__dict__'):
-            return GoldFinchBlockConfigMap(**config_map.__dict__)
+            dict_obj = config_map
+        elif hasattr(config_map, '__dict__'):
+            dict_obj = config_map.__dict__
         
+        if dict_obj is not None:
+            # Filter for only valeus in GoldFinchBlockConfigMap
+            new_dict = {}
+            for key, value in dict_obj.items():
+                if key in GoldFinchBlockConfigMap.__dataclass_fields__:
+                    new_dict[key] = value
+            return GoldFinchBlockConfigMap(**new_dict)
+
         raise ValueError(f"Unsupported config_map type: {type(config_map)}")
