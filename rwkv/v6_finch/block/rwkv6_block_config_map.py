@@ -129,20 +129,10 @@ class RWKV6BlockConfigMap:
         Returns a new config map with updated values
         '''
 
-        new_dict = {
-            "n_layer": self.n_layer,
-            "n_dim": self.n_dim,
-            "head_size": self.head_size,
-            "head_size_divisor": self.head_size_divisor,
-            "dropout_rate": self.dropout_rate,
-            "n_dim_ffn": self.n_dim_ffn,
-            "n_dim_att": self.n_dim_att,
-            "layer_id": self.layer_id,
-            "n_head": self.n_head,
-            "device": self.device,
-            "dtype": self.dtype,
-            "tmix_backend": self.tmix_backend,
-        }
+        new_dict = {}
+        for key in RWKV6BlockConfigMap.__dataclass_fields__:
+            if key in self:
+                new_dict[key] = self[key]
         new_dict.update(kwargs)
 
         return RWKV6BlockConfigMap(**new_dict)
@@ -155,10 +145,18 @@ class RWKV6BlockConfigMap:
         if isinstance(config_map, RWKV6BlockConfigMap):
             return config_map
         
+        dict_obj = None
         if isinstance(config_map, dict):
-            return RWKV6BlockConfigMap(**config_map)
-
-        if hasattr(config_map, '__dict__'):
-            return RWKV6BlockConfigMap(**config_map.__dict__)
+            dict_obj = config_map
+        elif hasattr(config_map, '__dict__'):
+            dict_obj = config_map.__dict__
         
+        if dict_obj is not None:
+            # Filter for only valeus in RWKV6BlockConfigMap
+            new_dict = {}
+            for key, value in dict_obj.items():
+                if key in RWKV6BlockConfigMap.__dataclass_fields__:
+                    new_dict[key] = value
+            return RWKV6BlockConfigMap(**new_dict)
+
         raise ValueError(f"Unsupported config_map type: {type(config_map)}")
