@@ -159,10 +159,10 @@ class RWKV6FinchModel(nn.Module):
         # Final layer norm, and head
         x_emb = x_emb.to(self.ln_out.weight.device, non_blocking=True)
         x_emb = self.ln_out(x_emb)
-        x_emb = self.head(x_emb)
+        x_out = self.head(x_emb)
 
         # Return the output and the state list
-        return x_emb, ret_stateList
+        return x_out, ret_stateList
     
     @torch.compile(mode="default")
     def forward_with_default_compile(
