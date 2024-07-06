@@ -118,7 +118,7 @@ class RWKV6FinchModel(nn.Module):
         '''
         # Prepare the state, with the batch size
         if prv_stateList is None:
-            prv_stateList = self.init_state(idx.size(0))
+            prv_stateList = self.init_state(idx.shape[0])
 
         # If no return state is set, let _forward_internal, set it up
         if ret_stateList is None:
