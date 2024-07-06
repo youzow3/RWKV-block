@@ -130,8 +130,8 @@ class RWKV5BlockConfigMap:
 
         new_dict = {}
         for key in RWKV5BlockConfigMap.__dataclass_fields__:
-            if key in self:
-                new_dict[key] = self[key]
+            if key in self.__dict__:
+                new_dict[key] = self.__dict__[key]
         new_dict.update(kwargs)
 
         return RWKV5BlockConfigMap(**new_dict)
