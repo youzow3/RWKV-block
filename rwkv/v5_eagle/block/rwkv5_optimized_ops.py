@@ -46,7 +46,7 @@ def RWKVx060_chunk(
 
 def RWKVx060_reshape_run(
         # Request shapes
-        B:int, T:int, C:int, H:int, 
+        B:int, T:int, C:int, H:int, K:int,
         # Inbound request tensors
         r:Tensor,k:Tensor,v:Tensor,w:Tensor,u:Tensor,in_wkv_state:Tensor,
         # Operator backend type to use
@@ -58,10 +58,12 @@ def RWKVx060_reshape_run(
     (with the B, T, C, H values: Batch size, token/time, C, H)
     '''
     if backend == 'auto':
-        if r.device.type == 'cpu' or r.device.type == 'mps':
-            backend = 'torch'
-        else:
-            backend = 'fla'
+        # Default to torch, as fla has issues with backprop
+        backend = 'torch'
+        # if r.device.type == 'cpu' or r.device.type == 'mps':
+        #     backend = 'torch'
+        # else:
+        #     backend = 'fla'
 
     if backend == 'fla':
         r = r.view(B,T,H,-1).transpose(1,2).float()
@@ -71,10 +73,11 @@ def RWKVx060_reshape_run(
         o, out_wkv_state = RWKVx060_chunk_fla(r, k, v, w, u=u.float(), wkv_state=in_wkv_state.float(), scale=1, output_final_state=True)
         return o.bfloat16().transpose(1,2).reshape(B,T,C), out_wkv_state.bfloat16()
     elif backend == 'torch':
-        r = r.view(B,T,H,-1).transpose(1,2)
-        k = k.view(B,T,H,-1).transpose(1,2)
-        v = v.view(B,T,H,-1).transpose(1,2)
-        w = -torch.exp(w.view(B,T,H,-1).transpose(1,2))
+        u = u.view(1,H,1,K).to(r.dtype)
+        r = r.view(B,T,H,K).transpose(1,2)
+        k = k.view(B,T,H,K).transpose(1,2)
+        v = v.view(B,T,H,K).transpose(1,2)
+        w = -torch.exp(w.view(B,T,H,K).transpose(1,2))
         o, out_wkv_state = RWKVx060_chunk_torch(r, k, v, w, u, in_wkv_state)
         return o.transpose(1,2).reshape(B,T,C), out_wkv_state
     else:

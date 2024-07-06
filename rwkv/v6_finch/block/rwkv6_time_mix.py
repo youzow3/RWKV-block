@@ -107,6 +107,7 @@ class RWKV6TimeMix(torch.nn.Module):
         # Get the sizing
         BATCH_SIZE, SEQ_LEN, IN_EMB_SIZE = x.size()
         N_HEAD = self.n_head
+        HEAD_SIZE = self.head_size
 
         ##########
         ## x060
@@ -134,7 +135,7 @@ class RWKV6TimeMix(torch.nn.Module):
         w = (self.time_decay + torch.tanh(xw @ self.time_decay_w1) @ self.time_decay_w2).to(r.dtype)
         u = self.time_faaaa
 
-        x, wkv_state_out = RWKVx060_reshape_run(BATCH_SIZE, SEQ_LEN, IN_EMB_SIZE, N_HEAD, r, k, v, w, u, wkv_state_in, backend=self.tmix_backend)
+        x, wkv_state_out = RWKVx060_reshape_run(BATCH_SIZE, SEQ_LEN, IN_EMB_SIZE, N_HEAD, HEAD_SIZE, r, k, v, w, u, wkv_state_in, backend=self.tmix_backend)
         x = x.view(BATCH_SIZE * SEQ_LEN, IN_EMB_SIZE)
 
         x = self.ln_x(x).view(BATCH_SIZE, SEQ_LEN, IN_EMB_SIZE)

@@ -108,7 +108,6 @@ class RWKV5TimeMix(torch.nn.Module):
         H = self.n_head
         K = self.head_size
         head_size_divisor = self.head_size_divisor
-        V = K
 
         # Perform the tokenshift, and get the respective state
         xx = torch.concat((shift_state_in.unsqueeze(1), x[:, :-1]), dim=1)
@@ -121,7 +120,7 @@ class RWKV5TimeMix(torch.nn.Module):
 
         r = self.receptance(xr).view(B, T, H, K).transpose(1, 2) # BHTK
         k = self.key(xk).view(B, T, H, K).transpose(1, 2)      # BHTK
-        v = self.value(xv).view(B, T, H, V).transpose(1, 2)    # BHTV
+        v = self.value(xv).view(B, T, H, K).transpose(1, 2)    # BHTV
         g = F.silu(self.gate(xg))
 
         w = torch.exp(-torch.exp(self.time_decay.float())).view(1,H,1,K).expand(1,H,T,K)

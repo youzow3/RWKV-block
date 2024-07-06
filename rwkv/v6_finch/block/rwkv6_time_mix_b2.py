@@ -122,6 +122,7 @@ class RWKV6TimeMixB2(nn.Module):
         # Get the sizing
         BATCH_SIZE, SEQ_LEN, IN_EMB_SIZE = x.size()
         N_HEAD = self.n_head
+        HEAD_SIZE = self.head_size
 
         ##########
         ## x060b2
@@ -155,7 +156,7 @@ class RWKV6TimeMixB2(nn.Module):
         # else:
         #     u = self.time_faaaa
 
-        y, wkv_state_out = RWKVx060_reshape_run(BATCH_SIZE, SEQ_LEN, IN_EMB_SIZE, N_HEAD, r, k, v, w, u, wkv_state_in, self.tmix_backend)
+        y, wkv_state_out = RWKVx060_reshape_run(BATCH_SIZE, SEQ_LEN, IN_EMB_SIZE, N_HEAD, HEAD_SIZE, r, k, v, w, u, wkv_state_in, self.tmix_backend)
         
         # if self.use_gf_v2:
         y = y + v2
