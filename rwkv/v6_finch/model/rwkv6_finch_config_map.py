@@ -40,10 +40,6 @@ class RWKV6FinchConfigMap(RWKV6BlockConfigMap):
                 idx = key.split('.')[1]
                 n_layer = max(n_layer, int(idx)+1)
         
-        # # Get the n head and head size, if time_faaaa exists
-        # n_head = 32
-        # head_size = 64
-        
         # Initialize the config map, with the configured values
         return RWKV6FinchConfigMap(
             n_layer=n_layer,
@@ -51,8 +47,8 @@ class RWKV6FinchConfigMap(RWKV6BlockConfigMap):
             n_vocab=state_dict['emb.weight'].shape[0],
             init_state_wkv=hasattr(state_dict, 'init_state.0.wkv'),
 
-            # n_head=state_dict['blocks.0.att.time_faaaa'].shape[0],
-            # head_size=state_dict['blocks.0.att.time_faaaa'].shape[1],
+            n_head=state_dict['blocks.0.att.time_faaaa'].shape[0],
+            head_size=state_dict['blocks.0.att.time_faaaa'].shape[1],
 
             n_dim_att=state_dict['blocks.0.att.key.weight'].shape[0],
             n_dim_ffn=state_dict['blocks.0.ffn.key.weight'].shape[0],
