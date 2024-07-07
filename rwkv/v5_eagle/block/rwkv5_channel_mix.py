@@ -30,11 +30,11 @@ class RWKV5ChannelMix(torch.nn.Module):
         # ---
         with torch.no_grad():  # fancy init of time_mix
             ratio_1_to_almost0 = 1.0 - (layer_id / n_layer)  # 1 to ~0
-            ddd = torch.ones(1, 1, n_dim)
+            ddd = torch.ones(1, 1, n_dim, device=device, dtype=dtype)
             for i in range(n_dim):
                 ddd[0, 0, i] = i / n_dim
-            self.time_mix_k = nn.Parameter(torch.pow(ddd, ratio_1_to_almost0).to(device, dtype=dtype))
-            self.time_mix_r = nn.Parameter(torch.pow(ddd, ratio_1_to_almost0).to(device, dtype=dtype))
+            self.time_mix_k = nn.Parameter(torch.pow(ddd, ratio_1_to_almost0))
+            self.time_mix_r = nn.Parameter(torch.pow(ddd, ratio_1_to_almost0))
 
         self.key = nn.Linear(n_dim, n_dim_ffn, bias=False, device=device, dtype=dtype)
         self.receptance = nn.Linear(n_dim, n_dim, bias=False, device=device, dtype=dtype)
@@ -96,15 +96,20 @@ class RWKV5ChannelMix(torch.nn.Module):
         '''
         return self.forward(x, last_state)
     
-    def load_from_model_state_dict(self, state_dict: dict, layer_id:int, non_blocking:bool=True):
+    def load_from_model_state_dict(self, model_state_dict: dict, layer_id:int, non_blocking:bool=True):
         '''
         Given the Full/partial RWKV model weights, loaded via `torch.load`
-        Setup the RWKV5ChannelMix model weights, using the layer_id
+        Setup the the current module weights, using the layer_id
         '''
-        # Copy the values from the state_dict
-        self.time_mix_r.data.copy_(state_dict[f"blocks.{layer_id}.ffn.time_mix_r"], non_blocking=non_blocking)
-        self.time_mix_k.data.copy_(state_dict[f"blocks.{layer_id}.ffn.time_mix_k"], non_blocking=non_blocking)
-        self.key.weight.data.copy_(state_dict[f"blocks.{layer_id}.ffn.key.weight"], non_blocking=non_blocking)
-        self.receptance.weight.data.copy_(state_dict[f"blocks.{layer_id}.ffn.receptance.weight"], non_blocking=non_blocking)
-        self.value.weight.data.copy_(state_dict[f"blocks.{layer_id}.ffn.value.weight"], non_blocking=non_blocking)
+        # Get the current state_dict
+        current_state_dict = self.state_dict()
+
+        # Iterate each parameter in the state_dict, and compare from the model
+        for n in current_state_dict:
+            model_key = f"blocks.{layer_id}.ffn.{n}"
+            if model_key not in model_state_dict:
+                continue
+
+            # Copy the values from the state_dict
+            current_state_dict[n].copy_(model_state_dict[model_key], non_blocking=non_blocking)
         

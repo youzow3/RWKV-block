@@ -122,21 +122,22 @@ class RWKV5LayerBlock(torch.nn.Module):
         '''
         return self.forward(x, last_state)
 
-    def load_from_model_state_dict(self, state_dict:dict, layer_id:int=-1, non_blocking:bool=True):
+    def load_from_model_state_dict(self, model_state_dict:dict, layer_id:int=-1, non_blocking:bool=True):
         '''
         Given the Full/partial RWKV model weights, load the block weights accordingly
         '''
         if layer_id == -1:
             layer_id = self.configMap.get_layer_id(1)
             
-        if layer_id == 0:
-            self.ln0.weight.data.copy_(state_dict[f"blocks.{layer_id}.ln0.weight"], non_blocking=non_blocking)
-            self.ln0.bias.data.copy_(state_dict[f"blocks.{layer_id}.ln0.bias"], non_blocking=non_blocking)
+        # Get the current state_dict
+        current_state_dict = self.state_dict()
 
-        self.ln1.weight.data.copy_(state_dict[f"blocks.{layer_id}.ln1.weight"], non_blocking=non_blocking)
-        self.ln1.bias.data.copy_(state_dict[f"blocks.{layer_id}.ln1.bias"], non_blocking=non_blocking)
-        self.ln2.weight.data.copy_(state_dict[f"blocks.{layer_id}.ln2.weight"], non_blocking=non_blocking)
-        self.ln2.bias.data.copy_(state_dict[f"blocks.{layer_id}.ln2.bias"], non_blocking=non_blocking)
+        # Iterate each parameter in the state_dict, and compare from the model
+        for n in current_state_dict:
+            model_key = f"blocks.{layer_id}.{n}"
+            if model_key not in model_state_dict:
+                continue
 
-        self.att.load_from_model_state_dict(state_dict, layer_id, non_blocking=non_blocking)
-        self.ffn.load_from_model_state_dict(state_dict, layer_id, non_blocking=non_blocking)
+            # Copy the values from the state_dict
+            current_state_dict[n].copy_(model_state_dict[model_key], non_blocking=non_blocking)
+        

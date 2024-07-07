@@ -167,23 +167,19 @@ class RWKV5TimeMix(torch.nn.Module):
     #
     # ---------------------------------
     
-    def load_from_model_state_dict(self, state_dict: dict, layer_id:int, non_blocking:bool=True):
+    def load_from_model_state_dict(self, model_state_dict: dict, layer_id:int, non_blocking:bool=True):
         '''
         Given the Full/partial RWKV model weights, loaded via `torch.load`
-        Setup the RWKV_TimeMix model weights, using the layer_id
+        Setup the the current module weights, using the layer_id
         '''
-        # copy_ the values over, instead of replacing the model weights
-        self.time_mix_k.data.copy_(state_dict[f"blocks.{layer_id}.att.time_mix_k"], non_blocking=non_blocking)
-        self.time_mix_v.data.copy_(state_dict[f"blocks.{layer_id}.att.time_mix_v"], non_blocking=non_blocking)
-        self.time_mix_r.data.copy_(state_dict[f"blocks.{layer_id}.att.time_mix_r"], non_blocking=non_blocking)
-        self.time_mix_g.data.copy_(state_dict[f"blocks.{layer_id}.att.time_mix_g"], non_blocking=non_blocking)
-        self.time_decay.data.copy_(state_dict[f"blocks.{layer_id}.att.time_decay"], non_blocking=non_blocking)
-        self.time_faaaa.data.copy_(state_dict[f"blocks.{layer_id}.att.time_faaaa"], non_blocking=non_blocking)
+        # Get the current state_dict
+        current_state_dict = self.state_dict()
 
-        self.receptance.weight.data.copy_(state_dict[f"blocks.{layer_id}.att.receptance.weight"], non_blocking=non_blocking)
-        self.key.weight.data.copy_(state_dict[f"blocks.{layer_id}.att.key.weight"], non_blocking=non_blocking)
-        self.value.weight.data.copy_(state_dict[f"blocks.{layer_id}.att.value.weight"], non_blocking=non_blocking)
-        self.output.weight.data.copy_(state_dict[f"blocks.{layer_id}.att.output.weight"], non_blocking=non_blocking)
-        self.gate.weight.data.copy_(state_dict[f"blocks.{layer_id}.att.gate.weight"], non_blocking=non_blocking)
-        self.ln_x.weight.data.copy_(state_dict[f"blocks.{layer_id}.att.ln_x.weight"], non_blocking=non_blocking)
-        self.ln_x.bias.data.copy_(state_dict[f"blocks.{layer_id}.att.ln_x.bias"], non_blocking=non_blocking)
+        # Iterate each parameter in the state_dict, and compare from the model
+        for n in current_state_dict:
+            model_key = f"blocks.{layer_id}.att.{n}"
+            if model_key not in model_state_dict:
+                continue
+
+            # Copy the values from the state_dict
+            current_state_dict[n].copy_(model_state_dict[model_key], non_blocking=non_blocking)

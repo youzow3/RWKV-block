@@ -82,15 +82,19 @@ class RWKV6ChannelMix(torch.nn.Module):
         '''
         return self.forward(in_x, in_state)
 
-    def load_from_model_state_dict(self, state_dict: dict, layer_id:int, non_blocking:bool=True):
+    def load_from_model_state_dict(self, model_state_dict: dict, layer_id:int, non_blocking:bool=True):
         '''
         Given the Full/partial RWKV model weights, loaded via `torch.load`
-        Setup the RWKV6ChannelMix model weights, using the layer_id
+        Setup the the current module weights, using the layer_id
         '''
-        # Copy the values from the state_dict
-        self.time_maa_k.data.copy_(state_dict[f"blocks.{layer_id}.ffn.time_maa_k"], non_blocking=non_blocking)
-        self.time_maa_r.data.copy_(state_dict[f"blocks.{layer_id}.ffn.time_maa_r"], non_blocking=non_blocking)
-        self.key.weight.data.copy_(state_dict[f"blocks.{layer_id}.ffn.key.weight"], non_blocking=non_blocking)
-        self.receptance.weight.data.copy_(state_dict[f"blocks.{layer_id}.ffn.receptance.weight"], non_blocking=non_blocking)
-        self.value.weight.data.copy_(state_dict[f"blocks.{layer_id}.ffn.value.weight"], non_blocking=non_blocking)
-        
+        # Get the current state_dict
+        current_state_dict = self.state_dict()
+
+        # Iterate each parameter in the state_dict, and compare from the model
+        for n in current_state_dict:
+            model_key = f"blocks.{layer_id}.ffn.{n}"
+            if model_key not in model_state_dict:
+                continue
+
+            # Copy the values from the state_dict
+            current_state_dict[n].copy_(model_state_dict[model_key], non_blocking=non_blocking)

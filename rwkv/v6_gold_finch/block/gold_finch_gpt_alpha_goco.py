@@ -153,3 +153,20 @@ class GoldFinchGPTAlphaGoCo(nn.Module):
         x = self.output(x)
 
         return x, shift_state
+    
+    def load_from_model_state_dict(self, model_state_dict: dict, layer_id:int, non_blocking:bool=True):
+        '''
+        Given the Full/partial RWKV model weights, loaded via `torch.load`
+        Setup the the current module weights, using the layer_id
+        '''
+        # Get the current state_dict
+        current_state_dict = self.state_dict()
+
+        # Iterate each parameter in the state_dict, and compare from the model
+        for n in current_state_dict:
+            model_key = f"blocks.{layer_id}.att.{n}"
+            if model_key not in model_state_dict:
+                continue
+
+            # Copy the values from the state_dict
+            current_state_dict[n].copy_(model_state_dict[model_key], non_blocking=non_blocking)
