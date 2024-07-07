@@ -50,33 +50,33 @@ class RWKV6TimeMix(torch.nn.Module):
                 ddd[0, 0, i] = i / n_dim
 
             # fancy time_mix
-            self.time_maa_x = nn.Parameter(1.0 - torch.pow(ddd, ratio_1_to_almost0)).to(device, dtype=dtype)
-            self.time_maa_w = nn.Parameter(1.0 - torch.pow(ddd, ratio_1_to_almost0)).to(device, dtype=dtype)
-            self.time_maa_k = nn.Parameter(1.0 - torch.pow(ddd, ratio_1_to_almost0)).to(device, dtype=dtype)
-            self.time_maa_v = nn.Parameter(1.0 - (torch.pow(ddd, ratio_1_to_almost0) + 0.3 * ratio_0_to_1)).to(device, dtype=dtype)
-            self.time_maa_r = nn.Parameter(1.0 - torch.pow(ddd, 0.5 * ratio_1_to_almost0)).to(device, dtype=dtype)
-            self.time_maa_g = nn.Parameter(1.0 - torch.pow(ddd, 0.5 * ratio_1_to_almost0)).to(device, dtype=dtype)
+            self.time_maa_x = nn.Parameter(1.0 - torch.pow(ddd, ratio_1_to_almost0))
+            self.time_maa_w = nn.Parameter(1.0 - torch.pow(ddd, ratio_1_to_almost0))
+            self.time_maa_k = nn.Parameter(1.0 - torch.pow(ddd, ratio_1_to_almost0))
+            self.time_maa_v = nn.Parameter(1.0 - (torch.pow(ddd, ratio_1_to_almost0) + 0.3 * ratio_0_to_1))
+            self.time_maa_r = nn.Parameter(1.0 - torch.pow(ddd, 0.5 * ratio_1_to_almost0))
+            self.time_maa_g = nn.Parameter(1.0 - torch.pow(ddd, 0.5 * ratio_1_to_almost0))
 
             D_MIX_DIM = 32 # generate TIME_MIX for w,k,v,r,g
-            self.time_maa_w1 = nn.Parameter(torch.zeros(n_dim, D_MIX_DIM*5)).to(device, dtype=dtype)
-            self.time_maa_w2 = nn.Parameter(torch.zeros(5, D_MIX_DIM, n_dim).uniform_(-0.01, 0.01)).to(device, dtype=dtype)
+            self.time_maa_w1 = nn.Parameter(torch.zeros(n_dim, D_MIX_DIM*5, device=device, dtype=dtype))
+            self.time_maa_w2 = nn.Parameter(torch.zeros(5, D_MIX_DIM, n_dim, device=device, dtype=dtype).uniform_(-0.01, 0.01))
 
             # fancy time_decay
-            decay_speed = torch.ones(n_dim_att)
+            decay_speed = torch.ones(n_dim_att, device=device, dtype=dtype)
             for n in range(n_dim_att):
                 decay_speed[n] = -6 + 5 * (n / (n_dim_att - 1)) ** (0.7 + 1.3 * ratio_0_to_1)
-            self.time_decay = nn.Parameter(decay_speed.reshape(1,1,n_dim_att)).to(device, dtype=dtype)
+            self.time_decay = nn.Parameter(decay_speed.reshape(1,1,n_dim_att))
 
             D_DECAY_DIM = 64
-            self.time_decay_w1 = nn.Parameter(torch.zeros(n_dim, D_DECAY_DIM)).to(device, dtype=dtype)
-            self.time_decay_w2 = nn.Parameter(torch.zeros(D_DECAY_DIM, n_dim_att).uniform_(-0.01, 0.01)).to(device, dtype=dtype)
-
-            tmp = torch.zeros(n_dim_att)
+            self.time_decay_w1 = nn.Parameter(torch.zeros(n_dim, D_DECAY_DIM, device=device, dtype=dtype))
+            self.time_decay_w2 = nn.Parameter(torch.zeros(D_DECAY_DIM, n_dim_att, device=device, dtype=dtype).uniform_(-0.01, 0.01))
+            
+            tmp = torch.zeros(n_dim_att, device=device, dtype=dtype)
             for n in range(n_dim_att):
                 zigzag = ((n + 1) % 3 - 1) * 0.1
                 tmp[n] = ratio_0_to_1 * (1 - (n / (n_dim_att - 1))) + zigzag
 
-            self.time_faaaa = nn.Parameter(tmp.reshape(self.n_head, self.head_size)).to(device, dtype=dtype)
+            self.time_faaaa = nn.Parameter(tmp.reshape(self.n_head, self.head_size))
 
         self.receptance = nn.Linear(n_dim, n_dim_att, bias=False, device=device, dtype=dtype)
         self.key = nn.Linear(n_dim, n_dim_att, bias=False, device=device, dtype=dtype)
