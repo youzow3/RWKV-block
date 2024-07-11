@@ -9,7 +9,10 @@ from ..block.rwkv6_block_config_map import RWKV6BlockConfigMap
 class RWKV6FinchConfigMap(RWKV6BlockConfigMap):
     # This is the world tokenizer size
     n_vocab: int = 65536 
-    init_state_wkv: bool = False 
+    init_state_wkv: bool = False
+
+    # State tuning flag
+    perform_state_tuning: bool = False
 
     @staticmethod
     def normalize(config_map: any) -> 'RWKV6FinchConfigMap':
@@ -39,13 +42,17 @@ class RWKV6FinchConfigMap(RWKV6BlockConfigMap):
             if key.startswith('blocks.'):
                 idx = key.split('.')[1]
                 n_layer = max(n_layer, int(idx)+1)
+
+        # Enable wkv_state
+        if 'init_state.0.wkv' in state_dict:
+            kwargs['init_state_wkv'] = True
         
         # Initialize the config map, with the configured values
         return RWKV6FinchConfigMap(
             n_layer=n_layer,
             n_dim=state_dict['emb.weight'].shape[1],
             n_vocab=state_dict['emb.weight'].shape[0],
-            init_state_wkv=hasattr(state_dict, 'init_state.0.wkv'),
+            # init_state_wkv=hasattr(state_dict, 'init_state.0.wkv'),
 
             n_head=state_dict['blocks.0.att.time_faaaa'].shape[0],
             head_size=state_dict['blocks.0.att.time_faaaa'].shape[1],
