@@ -11,9 +11,6 @@ class RWKV6FinchConfigMap(RWKV6BlockConfigMap):
     n_vocab: int = 65536 
     init_state_wkv: bool = False
 
-    # State tuning flag
-    perform_state_tuning: bool = False
-
     @staticmethod
     def normalize(config_map: any) -> 'RWKV6FinchConfigMap':
         '''
