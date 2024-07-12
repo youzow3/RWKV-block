@@ -42,10 +42,10 @@ class RWKV5EagleModel(nn.Module):
         if cMap.init_state_wkv:
             stateTuneList = [None]*n_layer
             for i in range(n_layer):
-                stateTuneList[i] = nn.ModuleDict({
-                    "wkv": torch.zeros(n_dim // 64, 64, 64, device=device, dtype=dtype),
+                stateTuneList[i] = nn.ParameterDict({
+                    "wkv": nn.Parameter(torch.zeros(n_dim // 64, 64, 64, device=device, dtype=dtype)),
                 })
-            self.init_state = nn.ModuleList(stateTuneList)
+            self.init_state = nn.ParameterList(stateTuneList)
 
     def load_from_model_state_dict(self, state_dict: dict, non_blocking:bool=True):
         '''
@@ -66,7 +66,7 @@ class RWKV5EagleModel(nn.Module):
     ###
     ### ---
 
-    def init_state(self, batch_size:int=1, skip_init_state:bool=False) -> list[tuple[torch.Tensor,torch.Tensor,torch.Tensor]]:
+    def get_init_state(self, batch_size:int=1, skip_init_state:bool=False) -> list[tuple[torch.Tensor,torch.Tensor,torch.Tensor]]:
         '''
         Get an initialized copy of the model state, for the given batch size
         '''
@@ -118,7 +118,7 @@ class RWKV5EagleModel(nn.Module):
         '''
         # Prepare the state, with the batch size
         if prv_stateList is None:
-            prv_stateList = self.init_state(idx.shape[0])
+            prv_stateList = self.get_init_state(idx.shape[0])
 
         # If no return state is set, let _forward_internal, set it up
         if ret_stateList is None:
