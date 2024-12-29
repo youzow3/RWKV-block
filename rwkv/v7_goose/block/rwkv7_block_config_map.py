@@ -103,7 +103,7 @@ class RWKV7BlockConfigMap:
         else:
             n_dim = self.n_dim
             assert n_dim  % 32 == 0, f"n_dim must be divisible by 32"
-            n_dim_ffn = n_dim
+            n_dim_ffn = n_dim  * 4
 
         assert n_dim_ffn % 32 == 0, f"n_dim_ffn must be divisible by 32"
         return n_dim_ffn
