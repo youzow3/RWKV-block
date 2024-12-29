@@ -17,6 +17,7 @@ class RWKV7ChannelMix(torch.nn.Module):
 
         # Get required props
         n_dim = cMap.n_dim
+        n_dim_ffn = cMap.get_n_dim_ffn()
         n_layer = cMap.n_layer
 
         # Get optional props
@@ -33,8 +34,8 @@ class RWKV7ChannelMix(torch.nn.Module):
                 ddd[0, 0, i] = i / n_dim
             self.x_k = nn.Parameter(1.0 - torch.pow(ddd, ratio_1_to_almost0**4).to(device, dtype=dtype))
 
-        self.key = nn.Linear(n_dim, n_dim * 4, bias=False, device=device, dtype=dtype)
-        self.value = nn.Linear(n_dim * 4, n_dim, bias=False, device=device, dtype=dtype)
+        self.key = nn.Linear(n_dim, n_dim_ffn * 4, bias=False, device=device, dtype=dtype)
+        self.value = nn.Linear(n_dim_ffn * 4, n_dim, bias=False, device=device, dtype=dtype)
 
     def forward(self, x: torch.Tensor, last_state: torch.Tensor) -> tuple[torch.Tensor,torch.Tensor]:
         '''

@@ -34,9 +34,9 @@ class RWKV7BlockConfigMap:
     device: Union[torch.device, str, None] = None
     dtype: Union[torch.dtype, str, None] = None
 
-    # # Channel mix / FFN block dimension size
-    # n_dim_ffn: Optional[int] = None
-    # n_dim_att: Optional[int] = None
+    # Channel mix / FFN block dimension size
+    n_dim_ffn: Optional[int] = None
+    n_dim_att: Optional[int] = None
 
     # # number of heads
     # n_head: Optional[int] = None
@@ -81,33 +81,32 @@ class RWKV7BlockConfigMap:
     
     # ---
     
-    # def get_n_dim_att(self) -> int:
-    #     '''
-    #     Returns the dimension of attention
-    #     '''
-    #     if self.n_dim_att is not None:
-    #         n_dim_att = self.n_dim_att
-    #     else:
-    #         n_dim = self.n_dim
-    #         assert n_dim  % 32 == 0, f"n_dim must be divisible by 32"
-    #         n_dim_att = n_dim
-    #     assert n_dim_att % 32 == 0, f"n_dim_att must be divisible by 32 ({n_dim_att})"
-    #     return n_dim_att
+    def get_n_dim_att(self) -> int:
+        '''
+        Returns the dimension of attention
+        '''
+        if self.n_dim_att is not None:
+            n_dim_att = self.n_dim_att
+        else:
+            n_dim = self.n_dim
+            assert n_dim  % 32 == 0, f"n_dim must be divisible by 32"
+            n_dim_att = n_dim
+        assert n_dim_att % 32 == 0, f"n_dim_att must be divisible by 32 ({n_dim_att})"
+        return n_dim_att
     
-    # def get_n_dim_ffn(self) -> int:
-    #     '''
-    #     Returns the dimension of feed forward network
-    #     '''
-    #     if self.n_dim_ffn is not None:
-    #         n_dim_ffn = self.n_dim_ffn
-    #     else:
-    #         n_dim = self.n_dim
-    #         assert n_dim  % 32 == 0, f"n_dim must be divisible by 32"
-    #         n_dim_ffn = (self.n_dim * 3.5) // 32 * 32
+    def get_n_dim_ffn(self) -> int:
+        '''
+        Returns the dimension of feed forward network
+        '''
+        if self.n_dim_ffn is not None:
+            n_dim_ffn = self.n_dim_ffn
+        else:
+            n_dim = self.n_dim
+            assert n_dim  % 32 == 0, f"n_dim must be divisible by 32"
+            n_dim_ffn = n_dim
 
-    #     n_dim_ffn = int(n_dim_ffn)
-    #     assert n_dim_ffn % 32 == 0, f"n_dim_att must be divisible by 32"
-    #     return n_dim_ffn
+        assert n_dim_ffn % 32 == 0, f"n_dim_ffn must be divisible by 32"
+        return n_dim_ffn
     
     # def get_n_head(self) -> int:
     #     '''
@@ -119,7 +118,7 @@ class RWKV7BlockConfigMap:
     #         n_dim_att = self.get_n_dim_att()
     #         n_head = self.get_n_dim_att() // self.head_size
     #         assert n_dim_att % n_head == 0 ,  f"n_dim_att must be divisible by head_size ({self.head_size})"
-
+    #
     #     return n_head
 
     # ---
