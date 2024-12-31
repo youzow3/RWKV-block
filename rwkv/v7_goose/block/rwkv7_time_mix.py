@@ -1,0 +1,250 @@
+import torch, math
+from torch import nn
+from torch import Tensor
+from typing import Union
+from torch.nn import functional as F
+
+from .rwkv7_block_config_map import RWKV7BlockConfigMap
+
+class RWKV7TimeMix(torch.nn.Module):
+    '''
+    Time Mix block for RWKV V7
+    '''
+
+    def __init__(self, configMap: Union[RWKV7BlockConfigMap, any]):
+        super().__init__()
+
+        cMap:RWKV7BlockConfigMap = RWKV7BlockConfigMap.normalize(configMap)
+        self.configMap = cMap
+
+        # Get required props
+        n_dim = cMap.n_dim
+        n_layer = cMap.n_layer
+
+        # Get the layer id
+        layer_id = cMap.get_layer_id(0)
+        self.layer_id = layer_id
+
+        # Get optional props
+        device = cMap.get_device('cpu')
+        dtype = cMap.get_dtype('bfloat16')
+
+        # By default, n_dim_ffn = n_dim
+        n_dim_att = cMap.get_n_dim_att()
+
+        # Head size settings
+        head_size = cMap.head_size
+        self.head_size = head_size
+        head_size_divisor = cMap.head_size_divisor
+
+        # Number of heads
+        n_head = n_dim_att // head_size
+        assert n_dim_att % head_size == 0, "n_dim_att should be divisible by head_size"
+        self.n_head = n_head
+
+        # Backend
+        self.tmix_backend = cMap.tmix_backend
+
+        # Build the various params
+        # ---
+
+        with torch.no_grad():
+            ratio_0_to_1 = layer_id / (n_layer - 1)  # 0 to 1
+            ratio_1_to_almost0 = 1.0 - (layer_id / n_layer)  # 1 to ~0
+            ddd = torch.ones(1, 1, n_dim, device=device, dtype=dtype)
+            for i in range(n_dim):
+                ddd[0, 0, i] = i / n_dim
+
+            self.x_r = nn.Parameter(1.0 - torch.pow(ddd, 0.2 * ratio_1_to_almost0).to(device, dtype=dtype))
+            self.x_w = nn.Parameter(1.0 - torch.pow(ddd, 0.9 * ratio_1_to_almost0).to(device, dtype=dtype))
+            self.x_k = nn.Parameter(1.0 - (torch.pow(ddd, 0.9 * ratio_1_to_almost0) + 0.4 * ratio_0_to_1).to(device, dtype=dtype))
+            self.x_v = nn.Parameter(1.0 - (torch.pow(ddd, 0.4 * ratio_1_to_almost0) + 0.6 * ratio_0_to_1).to(device, dtype=dtype))
+            self.x_a = nn.Parameter(1.0 - torch.pow(ddd, 0.9 * ratio_1_to_almost0).to(device, dtype=dtype))
+            self.x_g = nn.Parameter(1.0 - torch.pow(ddd, 0.2 * ratio_1_to_almost0).to(device, dtype=dtype))
+
+            def ortho_init(x, scale):
+                with torch.no_grad():
+                    shape = x.shape
+                    if len(shape) == 2:
+                        gain = math.sqrt(shape[0] / shape[1]) if shape[0] > shape[1] else 1
+                        nn.init.orthogonal_(x, gain=gain * scale)
+                    elif len(shape) == 3:
+                        gain = math.sqrt(shape[1] / shape[2]) if shape[1] > shape[2] else 1
+                        for i in range(shape[0]):
+                            nn.init.orthogonal_(x[i], gain=gain * scale)
+                    else:
+                        assert False
+                    return x
+
+            # D_DECAY_LORA = 64
+            D_DECAY_LORA = max(32, int(round(  (1.8*(n_dim**0.5))  /32)*32))
+            self.w1 = nn.Parameter(torch.zeros(n_dim, D_DECAY_LORA).to(device, dtype=dtype))
+            self.w2 = nn.Parameter(ortho_init(torch.zeros(D_DECAY_LORA, n_dim), 0.1).to(device, dtype=dtype))
+            decay_speed = torch.ones(n_dim)
+            for n in range(n_dim):
+                decay_speed[n] = -7 + 5 * (n / (n_dim - 1)) ** (0.85 + 1.0 * ratio_0_to_1 ** 0.5)
+            self.w0 = nn.Parameter(decay_speed.reshape(1,1,n_dim).to(device, dtype=dtype) + 0.5) # !!! 0.5 comes from F.softplus !!!
+
+            # D_AAA_LORA = 64
+            D_AAA_LORA = max(32, int(round(  (1.8*(n_dim**0.5))  /32)*32)) # suggestion
+            self.a1 = nn.Parameter(torch.zeros(n_dim, D_AAA_LORA).to(device, dtype=dtype))
+            self.a2 = nn.Parameter(ortho_init(torch.zeros(D_AAA_LORA, n_dim), 0.1).to(device, dtype=dtype))
+            self.a0 = nn.Parameter(torch.zeros(1,1,n_dim).to(device, dtype=dtype))
+
+            # D_MV_LORA = 32
+            D_MV_LORA = max(32, int(round(  (1.3*(n_dim**0.5))  /32)*32)) # suggestion
+            self.v1 = nn.Parameter(torch.zeros(n_dim, D_MV_LORA).to(device, dtype=dtype))
+            self.v2 = nn.Parameter(ortho_init(torch.zeros(D_MV_LORA, n_dim), 0.1).to(device, dtype=dtype))
+            self.v0 = nn.Parameter(torch.zeros(1,1,n_dim).to(device, dtype=dtype)+1.0)
+
+            # D_GATE_LORA = 128
+            D_GATE_LORA = max(32, int(round(  (0.6*(n_dim**0.8))  /32)*32)) # suggestion
+            # Note: for some data, you can reduce D_GATE_LORA or even remove this gate
+            self.g1 = nn.Parameter(torch.zeros(n_dim, D_GATE_LORA).to(device, dtype=dtype))
+            self.g2 = nn.Parameter(ortho_init(torch.zeros(D_GATE_LORA, n_dim), 0.1).to(device, dtype=dtype))
+
+            self.k_k = nn.Parameter(torch.ones(1,1,n_dim).to(device, dtype=dtype)*0.85)
+            self.k_a = nn.Parameter(torch.ones(1,1,n_dim).to(device, dtype=dtype))
+            self.r_k = nn.Parameter(torch.zeros(n_head,head_size).to(device, dtype=dtype))
+
+        self.receptance = nn.Linear(n_dim, n_dim_att, bias=False, device=device, dtype=dtype)
+        self.key = nn.Linear(n_dim, n_dim_att, bias=False, device=device, dtype=dtype)
+        self.value = nn.Linear(n_dim, n_dim_att, bias=False, device=device, dtype=dtype)
+        self.gate = nn.Linear(n_dim, n_dim_att, bias=False, device=device, dtype=dtype)
+        self.output = nn.Linear(n_dim_att, n_dim, bias=False, device=device, dtype=dtype)
+        self.ln_x = nn.GroupNorm(n_head, n_dim_att, device=device, dtype=dtype, eps=(1e-5)*(head_size_divisor**2))
+        
+    def forward(self, x:Tensor, shift_state_in:Tensor, wkv_state_in:Tensor, v_first_state:Tensor) -> tuple[Tensor,Tensor,Tensor,Tensor]:
+        '''
+        forwarding time mix given the model weights and the input tokens and states.
+        
+        Given:
+        - Incoming token embedding size of shape [batch_size, seq_len, embedding_size]
+        - Incoming states containing of shapes:
+            [batch_size, state_size] ## Token Shift state,
+            [batch_size, n_head, head_size, head_size] ## WKV state
+        - Incoming v_first_state of shape [batch_size, seq_len, embedding_size]
+        
+        
+        Returns a pair 
+        - output embedding of shape [batch_size, seq_len, embedding_size]
+        - output state of shapes:
+            [batch_size, state_size] ## Token Shift state,
+            [batch_size, n_head, head_size, head_size] ## WKV state
+        - output v_first_state of shape [batch_size, seq_len, embedding_size]
+        
+        '''
+        # Get the sizing
+        BATCH_SIZE, SEQ_LEN, IN_EMB_SIZE = x.size()
+        N_HEAD = self.n_head
+        HEAD_SIZE = self.head_size
+
+        ##########
+        ## x070
+        ##########
+
+        shift_state_out = x[:, -1]
+        dxprev = torch.concat((shift_state_in.unsqueeze(1), x[:, :-1]), dim=1) - x
+
+        xr = x + dxprev * self.x_r
+        xw = x + dxprev * self.x_w
+        xk = x + dxprev * self.x_k
+        xv = x + dxprev * self.x_v
+        xa = x + dxprev * self.x_a
+        xg = x + dxprev * self.x_g
+        xx = dxprev
+
+        r = self.receptance(xr)
+        w = torch.tanh(xw @ self.w1) @ self.w2
+        k = self.key(xk)
+        v = self.value(xv)
+        a = torch.sigmoid(self.a0 + (xa @ self.a1) @ self.a2) # a is "in-context learning rate"
+        g = torch.sigmoid(xg @ self.g1) @ self.g2
+
+        kk = F.normalize((k * self.k_k).view(BATCH_SIZE,SEQ_LEN,N_HEAD,-1), dim=-1, p=2.0).view(BATCH_SIZE, SEQ_LEN, IN_EMB_SIZE)
+        k = k * (1 + (a-1) * self.k_a)
+
+        if self.layer_id == 0:
+            v_first_state = v # store the v of the first layer
+        else:
+            v = v + (v_first_state - v) * torch.sigmoid(self.v0 + (xv @ self.v1) @ self.v2) # add value residual
+
+        ######## cuda-free method 
+        # See: https://github.com/BlinkDL/RWKV-LM/blob/d4c42b2cac10f8f3896ce153e2310dc763662b7a/RWKV-v7/rwkv_v7_demo_fast.py#L238
+        ########
+        wkv_state_out = torch.empty_like(wkv_state_in)
+        w = torch.exp(-0.606531 * torch.sigmoid((self.w0 + w).float())) # 0.606531 = exp(-0.5)
+        # for B in range(BATCH_SIZE):
+        #     for t in range(SEQ_LEN):
+        #         r_, w_, k_, v_, kk_, a_ = r[B][t], w[B][t], k[B][t], v[B][t], kk[B][t], a[B][t]
+        #         vk = v_.view(N_HEAD,HEAD_SIZE,1) @ k_.view(N_HEAD,1,HEAD_SIZE)
+        #         ab = (-kk_).view(N_HEAD,HEAD_SIZE,1) @ (kk_*a_).view(N_HEAD,1,HEAD_SIZE)
+        #         wkv_state_out[B] = (wkv_state_in[B].float() * w_.view(N_HEAD,1,HEAD_SIZE).float() + wkv_state_in[B].float() @ ab.float() + vk.float()).to(dtype=wkv_state_in.dtype)
+        #         xx[B][t] = (wkv_state_out[B].to(dtype=x.dtype) @ r_.view(N_HEAD,HEAD_SIZE,1)).view(N_HEAD*HEAD_SIZE)
+        vk_state = wkv_state_in.float()
+        for t in range(SEQ_LEN):
+            r_, w_, k_, v_, kk_, a_ = r[:,t], w[:,t], k[:,t], v[:,t], kk[:,t], a[:,t]
+            vk = v_.view(BATCH_SIZE,N_HEAD,HEAD_SIZE,1) @ k_.view(BATCH_SIZE,N_HEAD,1,HEAD_SIZE)
+            ab = (-kk_).view(BATCH_SIZE,N_HEAD,HEAD_SIZE,1) @ (kk_*a_).view(BATCH_SIZE,N_HEAD,1,HEAD_SIZE)
+            vk_state = (vk_state * w_.view(BATCH_SIZE,N_HEAD,1,HEAD_SIZE).float() + vk_state @ ab.float() + vk.float())
+            xx[:,t] = (vk_state.to(dtype=x.dtype) @ r_.view(BATCH_SIZE,N_HEAD,HEAD_SIZE,1)).view(BATCH_SIZE,N_HEAD*HEAD_SIZE)
+        wkv_state_out = vk_state.to(dtype=wkv_state_in.dtype)
+        ######## cuda-free method 
+
+        ######## cuda-based method 
+        # wkv_state_out = wkv_state_in.clone()
+        # w = -F.softplus(-(self.w0 + w)) - 0.5 # soft-clamp to (-inf, -0.5)
+        # xx = RWKV7_OP(wkv_state_out, r, w, k, v, -kk, kk*a)
+        ######## cuda-based method 
+
+        xx = self.ln_x(xx.view(BATCH_SIZE * SEQ_LEN, IN_EMB_SIZE)).view(BATCH_SIZE, SEQ_LEN, IN_EMB_SIZE)
+        xx = xx + ((r.view(BATCH_SIZE,SEQ_LEN,N_HEAD,-1)*k.view(BATCH_SIZE,SEQ_LEN,N_HEAD,-1)*self.r_k).sum(dim=-1, keepdim=True) * v.view(BATCH_SIZE,SEQ_LEN,N_HEAD,-1)).view(BATCH_SIZE,SEQ_LEN,IN_EMB_SIZE)
+        xx = self.output(xx * g)
+
+        return xx, shift_state_out, wkv_state_out, v_first_state
+
+    @torch.compile(mode="default")
+    def forward_with_default_compile(self, in_x:Tensor, shift_state_in:Tensor, wkv_state_in:Tensor, v_first_state_in:Tensor, out_x:Tensor, shift_state_out:Tensor, wkv_state_out:Tensor, v_first_state_out:Tensor) -> tuple[Tensor,Tensor,Tensor]:
+        '''
+        Compiled varient of the forward function
+        With no new tensors being created for the output
+        Useful for static memory allocation optimizations inference
+        '''
+        out_x[:], shift_state_out[:], wkv_state_out[:], v_first_state_out[:] = self.forward(in_x, shift_state_in, wkv_state_in, v_first_state_in)
+        return out_x, shift_state_out, wkv_state_out, v_first_state_out
+
+    @torch.compile(mode="reduce-overhead")
+    def forward_with_reduce_compile(self, in_x:Tensor, shift_state_in:Tensor, wkv_state_in:Tensor, v_first_state:Tensor) -> tuple[Tensor,Tensor,Tensor]:
+        '''
+        Compiled varient of the forward function
+        With no input tensor being modified. 
+        Useful for reduce-overhead compile mode
+        '''
+        return self.forward(in_x, shift_state_in, wkv_state_in, v_first_state)
+    
+    # ---------------------------------
+    #
+    #  Model state handling
+    #
+    # ---------------------------------
+    
+    def load_from_model_state_dict(self, model_state_dict: dict, layer_id:int, non_blocking:bool=True):
+        '''
+        Given the Full/partial RWKV model weights, loaded via `torch.load`
+        Setup the the current module weights, using the layer_id
+        '''
+        # Get the current state_dict
+        current_state_dict = self.state_dict()
+
+        # Iterate each parameter in the state_dict, and compare from the model
+        for n in current_state_dict:
+            model_key = f"blocks.{layer_id}.att.{n}"
+            if model_key not in model_state_dict:
+                continue
+
+            # Copy the values from the state_dict
+            try:
+                current_state_dict[n].copy_(model_state_dict[model_key], non_blocking=non_blocking)
+            except Exception as e:
+                print(f"[ERROR] loading: {model_key} | model shape: {current_state_dict[n].shape} | weight shape: {model_state_dict[model_key].shape}")
+                raise e
