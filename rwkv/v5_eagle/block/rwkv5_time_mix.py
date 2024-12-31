@@ -130,7 +130,7 @@ class RWKV5TimeMix(torch.nn.Module):
         # Logits and state
         wkv_state_out = wkv_state_in.to(r.dtype)
 
-        # RWKVx060 optimized kernels
+        # RWKVx060 optimized kernels (backward compatible with RWKVx050)
         x_logits, wkv_state_out = RWKVx060_chunk(r, k, v, w, u, wkv_state_out, backend=self.tmix_backend) 
         x_logits = x_logits.transpose(1,2).reshape(B,T,C)
 
