@@ -182,7 +182,8 @@ class RWKV7TimeMix(torch.nn.Module):
             if triton is None:
                 tmix_backend = "pytorch"
             else:
-                tmix_backend = "triton"
+                # tmix_backend = "triton"
+                tmix_backend = "pytorch"
 
         if tmix_backend == "pytorch":
             ######## pure pytorch method
