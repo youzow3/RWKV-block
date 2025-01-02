@@ -1,9 +1,10 @@
 import torch
 
+@torch.compiler.disable()
 def rwkv7_attn_pytorch(
     r,w,k,v, kk,a, 
     BATCH_SIZE, SEQ_LEN, IN_EMB_SIZE, N_HEAD, HEAD_SIZE,
-    xx, wkv_state_in
+    x, xx, wkv_state_in
 ):
     ######## pure pytorch method
     # See: https://github.com/BlinkDL/RWKV-LM/blob/d4c42b2cac10f8f3896ce153e2310dc763662b7a/RWKV-v7/rwkv_v7_demo_fast.py#L238

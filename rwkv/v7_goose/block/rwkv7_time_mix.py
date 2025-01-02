@@ -7,13 +7,14 @@ from torch.nn import functional as F
 from .rwkv7_block_config_map import RWKV7BlockConfigMap
 
 # Check for triton package, if GPU is available
+triton = None
 if torch.cuda.is_available():
     try:
         import triton
     except ImportError:
         triton = None
-if triton is not None:
-    from .kernel.rwkv7_attn_triton import rwkv7_attn_triton
+    if triton is not None:
+        from .kernel.rwkv7_attn_triton import rwkv7_attn_triton
 else:
     print("[WARNING] Triton not available, falling back to pytorch mode by default - this is significantly slower")
 
@@ -195,7 +196,7 @@ class RWKV7TimeMix(torch.nn.Module):
             # See: https://github.com/BlinkDL/RWKV-LM/blob/d4c42b2cac10f8f3896ce153e2310dc763662b7a/RWKV-v7/rwkv_v7_demo_fast.py#L238
             ########
             w = torch.exp(-0.606531 * torch.sigmoid((self.w0 + w).float())) # 0.606531 = exp(-0.5)
-            xx, wkv_state_out = rwkv7_attn_pytorch(r, w, k, v, kk, a, BATCH_SIZE, SEQ_LEN, IN_EMB_SIZE, N_HEAD, HEAD_SIZE, xx, wkv_state_in) 
+            xx, wkv_state_out = rwkv7_attn_pytorch(r, w, k, v, kk, a, BATCH_SIZE, SEQ_LEN, IN_EMB_SIZE, N_HEAD, HEAD_SIZE, x, xx, wkv_state_in) 
         elif tmix_backend == "triton":
             w = -F.softplus(-(self.w0 + w)) - 0.5
             xx, wkv_state_out = rwkv7_attn_triton(r, w, k, v, -kk, kk*a, s0=wkv_state_in)
