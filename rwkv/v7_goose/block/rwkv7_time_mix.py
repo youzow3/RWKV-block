@@ -47,6 +47,9 @@ class RWKV7TimeMix(torch.nn.Module):
         # By default, n_dim_ffn = n_dim
         n_dim_att = cMap.get_n_dim_att()
 
+        # Assert n_dim == n_dim_att, until we support different n_dim and n_dim_att
+        assert n_dim == n_dim_att, "n_dim should be equal to n_dim_att (@TODO: support different n_dim and n_dim_att)"
+
         # Head size settings
         head_size = cMap.head_size
         self.head_size = head_size
