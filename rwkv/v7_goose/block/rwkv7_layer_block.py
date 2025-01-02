@@ -39,8 +39,8 @@ class RWKV7LayerBlock(torch.nn.Module):
             self.ln0 = nn.Identity(device=device)
 
         # Setup the time and channel mix
-        self.attention = RWKV7TimeMix(configMap)
-        self.feed_forward = RWKV7ChannelMix(configMap)
+        self.att = RWKV7TimeMix(configMap)
+        self.ffn = RWKV7ChannelMix(configMap)
 
         # Setup droupout at block level
         if dropout_rate > 0.0:            
@@ -75,7 +75,7 @@ class RWKV7LayerBlock(torch.nn.Module):
         # assert last_state.tmix_shift is not None
         # assert last_state.tmix_wkv is not None
 
-        xx, tmix_shift, tmix_wkv, v_first = self.attention(
+        xx, tmix_shift, tmix_wkv, v_first = self.att(
             self.ln1(x),
             last_state[0], # tmix_shift,
             last_state[1], # tmix_wkv
@@ -85,7 +85,7 @@ class RWKV7LayerBlock(torch.nn.Module):
         # x = x + att_out
         x = self.drop0(x + xx)
 
-        ffn_out, ffn_state = self.feed_forward(
+        ffn_out, ffn_state = self.ffn(
             self.ln2(x),
             last_state[2] # cmix_shift,
         )
@@ -138,5 +138,8 @@ class RWKV7LayerBlock(torch.nn.Module):
                 continue
 
             # Copy the values from the state_dict
-            current_state_dict[n].copy_(model_state_dict[model_key], non_blocking=non_blocking)
-        
+            try:
+                current_state_dict[n].copy_(model_state_dict[model_key], non_blocking=non_blocking)
+            except Exception as e:
+                print(f"[ERROR] loading: {model_key} | model shape: {current_state_dict[n].shape} | weight shape: {model_state_dict[model_key].shape}")
+                raise e
