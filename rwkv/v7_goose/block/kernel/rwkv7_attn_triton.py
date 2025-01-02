@@ -212,10 +212,11 @@ def tl_dot(prec:tl.constexpr, a, b) -> torch.Tensor:
     else:
         tl.static_assert(False)
 
-def rwkv7_attn_triton(r,w,k,v,a,b, HEAD_SIZE, dot_prec = 'fp32', s0 = None):
+def rwkv7_attn_triton(r,w,k,v,a,b, HEAD_SIZE=64, dot_prec='fp32', s0=None):
     B,T,HC = w.shape
     C = HEAD_SIZE
     H = HC//C
     r,w,k,v,a,b = [i.view(B,T,H,C) for i in [r,w,k,v,a,b]]
     s0 = th.zeros(B,H,C,C, dtype=th.bfloat16,device=w.device) if s0 is None else s0
-    return TritonRWKV7.apply(w,r,k,v,a,b,s0,dot_prec)[0].view(B,T,HC)
+    xx, sT = TritonRWKV7.apply(w,r,k,v,a,b,s0,dot_prec)
+    return xx.view(B,T,HC), sT
