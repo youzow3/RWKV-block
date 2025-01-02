@@ -1,5 +1,7 @@
 import torch
 
+# We intentionally disable the compiler, as the pure pytorch implementation
+# is known to be "unstable" for pytorch compile
 @torch.compiler.disable()
 def rwkv7_attn_pytorch(
     r,w,k,v, kk,a, 

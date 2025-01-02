@@ -202,7 +202,7 @@ class TritonRWKV7(th.autograd.Function):
         return dw,dq,dk,dv,dz,db,ds0,None
 
 @triton.jit
-def tl_dot(prec:tl.constexpr, a, b) -> torch.Tensor:
+def tl_dot(prec:tl.constexpr, a, b):
     if prec == 'fp32':
         return tl.dot(a.to(tl.float32),b.trans().to(tl.float32).trans(), allow_tf32=False)
     elif prec == 'tf32':

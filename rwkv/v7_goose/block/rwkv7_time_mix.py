@@ -215,7 +215,7 @@ class RWKV7TimeMix(torch.nn.Module):
 
         return xx, shift_state_out, wkv_state_out, v_first_state
 
-    @torch.compile(mode="default")
+    @torch.compile(mode="default", fullgraph=True)
     def forward_with_default_compile(self, in_x:Tensor, shift_state_in:Tensor, wkv_state_in:Tensor, v_first_state_in:Tensor, out_x:Tensor, shift_state_out:Tensor, wkv_state_out:Tensor, v_first_state_out:Tensor) -> tuple[Tensor,Tensor,Tensor]:
         '''
         Compiled varient of the forward function
@@ -225,7 +225,7 @@ class RWKV7TimeMix(torch.nn.Module):
         out_x[:], shift_state_out[:], wkv_state_out[:], v_first_state_out[:] = self.forward(in_x, shift_state_in, wkv_state_in, v_first_state_in)
         return out_x, shift_state_out, wkv_state_out, v_first_state_out
 
-    @torch.compile(mode="reduce-overhead")
+    @torch.compile(mode="reduce-overhead", fullgraph=True)
     def forward_with_reduce_compile(self, in_x:Tensor, shift_state_in:Tensor, wkv_state_in:Tensor, v_first_state:Tensor) -> tuple[Tensor,Tensor,Tensor]:
         '''
         Compiled varient of the forward function
