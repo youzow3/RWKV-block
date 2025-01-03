@@ -111,9 +111,10 @@ class RWKV7TimeMix(torch.nn.Module):
 
             # D_MV_LORA = 32
             D_MV_LORA = max(32, int(round(  (1.3*(n_dim**0.5))  /32)*32)) # suggestion
-            self.v1 = nn.Parameter(torch.zeros(n_dim, D_MV_LORA).to(device, dtype=dtype))
-            self.v2 = nn.Parameter(ortho_init(torch.zeros(D_MV_LORA, n_dim), 0.1).to(device, dtype=dtype))
-            self.v0 = nn.Parameter(torch.zeros(1,1,n_dim).to(device, dtype=dtype)+1.0)
+            if layer_id > 0:
+                self.v1 = nn.Parameter(torch.zeros(n_dim, D_MV_LORA).to(device, dtype=dtype))
+                self.v2 = nn.Parameter(ortho_init(torch.zeros(D_MV_LORA, n_dim), 0.1).to(device, dtype=dtype))
+                self.v0 = nn.Parameter(torch.zeros(1,1,n_dim).to(device, dtype=dtype)+1.0)
 
             # D_GATE_LORA = 128
             D_GATE_LORA = max(32, int(round(  (0.6*(n_dim**0.8))  /32)*32)) # suggestion
