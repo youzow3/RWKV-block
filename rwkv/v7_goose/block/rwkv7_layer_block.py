@@ -104,7 +104,7 @@ class RWKV7LayerBlock(torch.nn.Module):
         # assert last_state.tmix_shift is not None
         # assert last_state.tmix_wkv is not None
 
-        xx, tmix_shift, tmix_wkv, v_first = self.att(
+        att_out, tmix_shift, tmix_wkv, v_first = self.att(
             self.ln1(x),
             last_state[0], # tmix_shift,
             last_state[1], # tmix_wkv
@@ -112,7 +112,7 @@ class RWKV7LayerBlock(torch.nn.Module):
         )
 
         # x = x + att_out
-        x = self.drop0(x + xx)
+        x = self.drop0(x + att_out)
 
         ffn_out, ffn_state = self.ffn(
             self.ln2(x),
