@@ -61,7 +61,7 @@ class RWKV7ChannelMix(torch.nn.Module):
             ddd = torch.ones(1, 1, n_dim)
             for i in range(n_dim):
                 ddd[0, 0, i] = i / n_dim
-            self.x_k._copy( (1.0 - torch.pow(ddd, ratio_1_to_almost0**4).to(device, dtype=dtype) )
+            self.x_k._copy( (1.0 - torch.pow(ddd, ratio_1_to_almost0**4)).to(device, dtype=dtype) )
 
         self.key = nn.Linear(n_dim, n_dim_ffn, bias=False, device=device, dtype=dtype)
         self.value = nn.Linear(n_dim_ffn, n_dim, bias=False, device=device, dtype=dtype)
