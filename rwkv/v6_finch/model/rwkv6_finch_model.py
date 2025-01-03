@@ -141,25 +141,25 @@ class RWKV6FinchModel(nn.Module):
 
         # Lets get the embedding
         idx = idx.to(self.emb.weight.device, non_blocking=True)
-        x_emb = self.emb(idx)
+        x_hidden_state = self.emb(idx)
 
-        # Iterate the block layers, compute the x embedding
+        # Iterate the block layers, compute the x_hidden_state
         if overwrite_ret_tensor:
             for i, block in enumerate(self.blocks):
-                x_emb = x_emb.to(block.ln1.weight.device, non_blocking=True)
-                x_emb, last_block_state = block(x_emb, prv_stateList[i])
+                x_hidden_state = x_hidden_state.to(block.ln1.weight.device, non_blocking=True)
+                x_hidden_state, last_block_state = block(x_hidden_state, prv_stateList[i])
                 ret_stateList[i][0][:] = last_block_state[0]
                 ret_stateList[i][1][:] = last_block_state[1]
                 ret_stateList[i][2][:] = last_block_state[2]
         else:
             for i, block in enumerate(self.blocks):
-                x_emb = x_emb.to(block.ln1.weight.device, non_blocking=True)
-                x_emb, ret_stateList[i] = block(x_emb, prv_stateList[i])
+                x_hidden_state = x_hidden_state.to(block.ln1.weight.device, non_blocking=True)
+                x_hidden_state, ret_stateList[i] = block(x_hidden_state, prv_stateList[i])
 
         # Final layer norm, and head
-        x_emb = x_emb.to(self.ln_out.weight.device, non_blocking=True)
-        x_emb = self.ln_out(x_emb)
-        x_out = self.head(x_emb)
+        x_hidden_state = x_hidden_state.to(self.ln_out.weight.device, non_blocking=True)
+        x_hidden_state = self.ln_out(x_hidden_state)
+        x_out = self.head(x_hidden_state)
 
         # Return the output and the state list
         return x_out, ret_stateList

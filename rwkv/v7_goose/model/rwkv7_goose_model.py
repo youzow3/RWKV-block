@@ -141,26 +141,26 @@ class RWKV7GooseModel(nn.Module):
 
         # Lets get the embedding
         idx = idx.to(self.emb.weight.device, non_blocking=True)
-        x_val = self.emb(idx)
+        x_hidden_state = self.emb(idx)
         v_first = None
 
-        # Iterate the block layers, compute the x embedding
+        # Iterate the block layers, compute the x_hidden_state
         if overwrite_ret_tensor:
             for i, block in enumerate(self.blocks):
-                x_val = x_val.to(block.ln1.weight.device, non_blocking=True)
-                x_val, last_block_state, v_first = block(x_val, prv_stateList[i], v_first)
+                x_hidden_state = x_hidden_state.to(block.ln1.weight.device, non_blocking=True)
+                x_hidden_state, last_block_state, v_first = block(x_hidden_state, prv_stateList[i], v_first)
                 ret_stateList[i][0][:] = last_block_state[0]
                 ret_stateList[i][1][:] = last_block_state[1]
                 ret_stateList[i][2][:] = last_block_state[2]
         else:
             for i, block in enumerate(self.blocks):
-                x_val = x_val.to(block.ln1.weight.device, non_blocking=True)
-                x_val, ret_stateList[i], v_first = block(x_val, prv_stateList[i], v_first)
+                x_hidden_state = x_hidden_state.to(block.ln1.weight.device, non_blocking=True)
+                x_hidden_state, ret_stateList[i], v_first = block(x_hidden_state, prv_stateList[i], v_first)
 
         # Final layer norm, and head
-        x_val = x_val.to(self.ln_out.weight.device, non_blocking=True)
-        x_val = self.ln_out(x_val)
-        x_out = self.head(x_val)
+        x_hidden_state = x_hidden_state.to(self.ln_out.weight.device, non_blocking=True)
+        x_hidden_state = self.ln_out(x_hidden_state)
+        x_out = self.head(x_hidden_state)
 
         # Return the output and the state list
         return x_out, ret_stateList
