@@ -16,15 +16,15 @@ class RWKV7LayerBlock(torch.nn.Module):
     def __init__(self, configMap: Union[RWKV7BlockConfigMap, any]):
         super().__init__()
 
-        cMap:RWKV7BlockConfigMap = RWKV7BlockConfigMap.normalize(configMap)
-        self.configMap = cMap
+        configMap:RWKV7BlockConfigMap = RWKV7BlockConfigMap.normalize(configMap)
+        self.configMap = configMap
 
         # Get required props
-        n_dim = cMap.n_dim
-        layer_id = cMap.get_layer_id(-1)
-        device = cMap.get_device('cpu')
-        dtype = cMap.get_dtype('bfloat16')
-        dropout_rate = cMap.dropout_rate
+        n_dim = configMap.n_dim
+        layer_id = configMap.get_layer_id(-1)
+        device = configMap.get_device('cpu')
+        dtype = configMap.get_dtype('bfloat16')
+        dropout_rate = configMap.dropout_rate
 
         # Validate the layer_id
         assert layer_id >= 0, f'layer_id must be >= 0, got {layer_id}'

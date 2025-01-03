@@ -12,20 +12,20 @@ class RWKV7ChannelMix(torch.nn.Module):
     def __init__(self, configMap: Union[RWKV7BlockConfigMap, any]):
         super().__init__()
 
-        cMap:RWKV7BlockConfigMap = RWKV7BlockConfigMap.normalize(configMap)
-        self.configMap = cMap
+        configMap:RWKV7BlockConfigMap = RWKV7BlockConfigMap.normalize(configMap)
+        self.configMap = configMap
 
         # Get required props
-        n_dim = cMap.n_dim
-        n_layer = cMap.n_layer
+        n_dim = configMap.n_dim
+        n_layer = configMap.n_layer
 
         # Get optional props
-        layer_id = cMap.get_layer_id(0)
-        device = cMap.get_device('cpu')
-        dtype = cMap.get_dtype('bfloat16')
+        layer_id = configMap.get_layer_id(0)
+        device = configMap.get_device('cpu')
+        dtype = configMap.get_dtype('bfloat16')
 
         # By default, n_dim_ffn = n_dim * 4
-        n_dim_ffn = cMap.get_n_dim_ffn() 
+        n_dim_ffn = configMap.get_n_dim_ffn() 
         
         # Build the various params
         # ---

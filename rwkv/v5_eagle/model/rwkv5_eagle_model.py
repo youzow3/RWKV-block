@@ -15,15 +15,15 @@ class RWKV5EagleModel(nn.Module):
     def __init__(self, config: Union[RWKV5EagleConfigMap, any]):
         super().__init__()
 
-        cMap:RWKV5EagleConfigMap = RWKV5EagleConfigMap.normalize(config)
-        self.configMap = cMap
+        configMap:RWKV5EagleConfigMap = RWKV5EagleConfigMap.normalize(config)
+        self.configMap = configMap
 
         # Get the required prop
-        n_layer = cMap.n_layer
-        n_vocab = cMap.n_vocab
-        device = cMap.get_device('cpu')
-        dtype = cMap.get_dtype('bfloat16')
-        n_dim = cMap.n_dim
+        n_layer = configMap.n_layer
+        n_vocab = configMap.n_vocab
+        device = configMap.get_device('cpu')
+        dtype = configMap.get_dtype('bfloat16')
+        n_dim = configMap.n_dim
         
         # Embedding layer
         self.emb = nn.Embedding(n_vocab, n_dim, device=device, dtype=dtype)
@@ -31,7 +31,7 @@ class RWKV5EagleModel(nn.Module):
         # main block layers
         blockList = [None]*n_layer
         for i in range(n_layer):
-            blockList[i] = RWKV5LayerBlock(cMap.new_block_config_map(layer_id=i))
+            blockList[i] = RWKV5LayerBlock(configMap.new_block_config_map(layer_id=i))
         self.blocks = nn.ModuleList(blockList)
 
         # ln_out and head
@@ -39,7 +39,7 @@ class RWKV5EagleModel(nn.Module):
         self.head = nn.Linear(n_dim, n_vocab, bias=False, device=device, dtype=dtype)
 
         # init state tuning support
-        if cMap.init_state_wkv:
+        if configMap.init_state_wkv:
             stateTuneList = [None]*n_layer
             for i in range(n_layer):
                 stateTuneList[i] = nn.ParameterDict({

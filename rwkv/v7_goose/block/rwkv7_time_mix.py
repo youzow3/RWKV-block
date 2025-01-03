@@ -29,31 +29,31 @@ class RWKV7TimeMix(torch.nn.Module):
     def __init__(self, configMap: Union[RWKV7BlockConfigMap, any]):
         super().__init__()
 
-        cMap:RWKV7BlockConfigMap = RWKV7BlockConfigMap.normalize(configMap)
-        self.configMap = cMap
+        configMap:RWKV7BlockConfigMap = RWKV7BlockConfigMap.normalize(configMap)
+        self.configMap = configMap
 
         # Get required props
-        n_dim = cMap.n_dim
-        n_layer = cMap.n_layer
+        n_dim = configMap.n_dim
+        n_layer = configMap.n_layer
 
         # Get the layer id
-        layer_id = cMap.get_layer_id(0)
+        layer_id = configMap.get_layer_id(0)
         self.layer_id = layer_id
 
         # Get optional props
-        device = cMap.get_device('cpu')
-        dtype = cMap.get_dtype('bfloat16')
+        device = configMap.get_device('cpu')
+        dtype = configMap.get_dtype('bfloat16')
 
         # By default, n_dim_ffn = n_dim
-        n_dim_att = cMap.get_n_dim_att()
+        n_dim_att = configMap.get_n_dim_att()
 
         # Assert n_dim == n_dim_att, until we support different n_dim and n_dim_att
         assert n_dim == n_dim_att, "n_dim should be equal to n_dim_att (@TODO: support different n_dim and n_dim_att)"
 
         # Head size settings
-        head_size = cMap.head_size
+        head_size = configMap.head_size
         self.head_size = head_size
-        head_size_divisor = cMap.head_size_divisor
+        head_size_divisor = configMap.head_size_divisor
 
         # Number of heads
         n_head = n_dim_att // head_size
@@ -61,7 +61,7 @@ class RWKV7TimeMix(torch.nn.Module):
         self.n_head = n_head
 
         # Backend
-        self.tmix_backend = cMap.tmix_backend
+        self.tmix_backend = configMap.tmix_backend
 
         # Build the various params
         # ---

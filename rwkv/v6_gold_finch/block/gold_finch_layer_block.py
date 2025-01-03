@@ -18,17 +18,17 @@ class GoldFinchLayerBlock(nn.Module):
     def __init__(self, configMap: Union[GoldFinchBlockConfigMap, any]):
         super().__init__()
 
-        cMap:GoldFinchBlockConfigMap = GoldFinchBlockConfigMap.normalize(configMap)
-        self.configMap = cMap
+        configMap:GoldFinchBlockConfigMap = GoldFinchBlockConfigMap.normalize(configMap)
+        self.configMap = configMap
 
         # Get required props
-        n_dim = cMap.n_dim
-        layer_id = cMap.get_layer_id(-1)
-        device = cMap.get_device('cpu')
-        dtype = cMap.get_dtype('bfloat16')
-        dropout_rate = cMap.dropout_rate
+        n_dim = configMap.n_dim
+        layer_id = configMap.get_layer_id(-1)
+        device = configMap.get_device('cpu')
+        dtype = configMap.get_dtype('bfloat16')
+        dropout_rate = configMap.dropout_rate
 
-        att_type = cMap.att_type
+        att_type = configMap.att_type
         self.att_type = att_type
 
         # Validate the layer_id

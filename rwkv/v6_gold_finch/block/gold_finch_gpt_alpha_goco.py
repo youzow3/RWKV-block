@@ -15,22 +15,22 @@ class GoldFinchGPTAlphaGoCo(nn.Module):
     def __init__(self, configMap: Union[GoldFinchBlockConfigMap, any]):
         super().__init__()
 
-        cMap:GoldFinchBlockConfigMap = GoldFinchBlockConfigMap.normalize(configMap)
-        self.configMap = cMap
+        configMap:GoldFinchBlockConfigMap = GoldFinchBlockConfigMap.normalize(configMap)
+        self.configMap = configMap
 
         # Get required props
-        n_dim = cMap.n_dim
-        n_layer = cMap.n_layer
+        n_dim = configMap.n_dim
+        n_layer = configMap.n_layer
 
         # Get optional props
-        n_dim_att = cMap.get_n_dim_att()
-        layer_id = cMap.get_layer_id(0)
-        device = cMap.get_device('cpu')
-        dtype = cMap.get_dtype('bfloat16')
+        n_dim_att = configMap.get_n_dim_att()
+        layer_id = configMap.get_layer_id(0)
+        device = configMap.get_device('cpu')
+        dtype = configMap.get_dtype('bfloat16')
 
-        n_head = cMap.get_n_head()
-        head_size = cMap.head_size
-        head_size_divisor = cMap.head_size_divisor
+        n_head = configMap.get_n_head()
+        head_size = configMap.head_size
+        head_size_divisor = configMap.head_size_divisor
 
         self.n_head = n_head
         self.head_size = head_size
