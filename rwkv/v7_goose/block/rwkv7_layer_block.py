@@ -21,12 +21,12 @@ class RWKV7LayerBlock(torch.nn.Module):
 
         # Get required props
         n_dim = configMap.n_dim
-        layer_id = configMap.get_layer_id(-1)
         device = configMap.get_device('cpu')
         dtype = configMap.get_dtype('bfloat16')
         dropout_rate = configMap.dropout_rate
 
-        # Validate the layer_id
+        # Get valid layer_id
+        layer_id = configMap.get_layer_id(-1)
         assert layer_id >= 0, f'layer_id must be >= 0, got {layer_id}'
 
         # Setup the layernorms, and mixes
@@ -125,8 +125,9 @@ class RWKV7LayerBlock(torch.nn.Module):
         '''
         Given the Full/partial RWKV model weights, load the block weights accordingly
         '''
-        if layer_id == -1:
-            layer_id = self.configMap.get_layer_id(1)
+        if layer_id <= -1:
+            layer_id = self.configMap.get_layer_id(-1)
+        assert layer_id >= 0, f'layer_id must be >= 0, got {layer_id}'
             
         # Get the current state_dict
         current_state_dict = self.state_dict()
