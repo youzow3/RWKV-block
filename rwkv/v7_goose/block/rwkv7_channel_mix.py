@@ -10,12 +10,39 @@ class RWKV7ChannelMix(torch.nn.Module):
     '''
 
     def __init__(self, configMap: Union[RWKV7BlockConfigMap, any]):
+        '''
+        Initialize the ChannelMix block.
+        
+        Note: this does not initialize the parameter weights itself
+        which would depend on the `init_parameters()` method
+        '''
+
         super().__init__()
 
         configMap:RWKV7BlockConfigMap = RWKV7BlockConfigMap.normalize(configMap)
         self.configMap = configMap
 
+        # Get various props
+        n_dim = configMap.n_dim
+        device = configMap.get_device('cpu')
+        dtype = configMap.get_dtype('bfloat16')
+
+        # By default, n_dim_ffn = n_dim * 4
+        n_dim_ffn = configMap.get_n_dim_ffn() 
+        
+        # Build the various params
+        # ---
+        self.x_k = nn.Parameter(torch.empty(1, 1, n_dim, device=device, dtype=dtype))
+        self.key = nn.Linear(n_dim, n_dim_ffn, bias=False, device=device, dtype=dtype)
+        self.value = nn.Linear(n_dim_ffn, n_dim, bias=False, device=device, dtype=dtype)
+
+    def init_parameters(self):
+        '''
+        Reset the parameters of the block, to an initial state used for training a model from scratch
+        '''
+        
         # Get required props
+        configMap = self.configMap
         n_dim = configMap.n_dim
         n_layer = configMap.n_layer
 
@@ -27,14 +54,14 @@ class RWKV7ChannelMix(torch.nn.Module):
         # By default, n_dim_ffn = n_dim * 4
         n_dim_ffn = configMap.get_n_dim_ffn() 
         
-        # Build the various params
+        # Reset the various params
         # ---
         with torch.no_grad():  # fancy init of time_mix
             ratio_1_to_almost0 = 1.0 - (layer_id / n_layer)  # 1 to ~0
             ddd = torch.ones(1, 1, n_dim)
             for i in range(n_dim):
                 ddd[0, 0, i] = i / n_dim
-            self.x_k = nn.Parameter(1.0 - torch.pow(ddd, ratio_1_to_almost0**4).to(device, dtype=dtype))
+            self.x_k._copy( (1.0 - torch.pow(ddd, ratio_1_to_almost0**4).to(device, dtype=dtype) )
 
         self.key = nn.Linear(n_dim, n_dim_ffn, bias=False, device=device, dtype=dtype)
         self.value = nn.Linear(n_dim_ffn, n_dim, bias=False, device=device, dtype=dtype)

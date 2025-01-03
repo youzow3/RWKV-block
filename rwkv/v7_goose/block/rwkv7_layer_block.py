@@ -50,6 +50,35 @@ class RWKV7LayerBlock(torch.nn.Module):
             self.drop0 = nn.Identity(device=device)
             self.drop1 = nn.Identity(device=device)
     
+    def init_parameters(self):
+        '''
+        Reset the parameters of the block, to an initial state used for training a model from scratch
+        '''
+        configMap = self.configMap
+
+        # Get required props
+        n_dim = configMap.n_dim
+        device = configMap.get_device('cpu')
+        dtype = configMap.get_dtype('bfloat16')
+        dropout_rate = configMap.dropout_rate
+
+        # Get valid layer_id
+        layer_id = configMap.get_layer_id(-1)
+        assert layer_id >= 0, f'layer_id must be >= 0, got {layer_id}'
+
+        # Redo the Setup for the layernorms, and mixes
+        self.ln1 = nn.LayerNorm(n_dim, device=device, dtype=dtype)
+        self.ln2 = nn.LayerNorm(n_dim, device=device, dtype=dtype)
+
+        if layer_id == 0:
+            self.ln0 = nn.LayerNorm(n_dim, device=device, dtype=dtype)
+        else:
+            self.ln0 = nn.Identity(device=device)
+
+        # Call the sub blocks init_parameters
+        self.att.init_parameters()
+        self.ffn.init_parameters()
+
     def forward(
         self, x:torch.Tensor,
         last_state: tuple[torch.Tensor,torch.Tensor,torch.Tensor], 

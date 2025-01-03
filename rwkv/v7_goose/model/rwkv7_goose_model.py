@@ -47,6 +47,39 @@ class RWKV7GooseModel(nn.Module):
                 })
             self.init_state = nn.ParameterList(stateTuneList)
 
+    def init_parameters(self):
+        '''
+        Reset the parameters of the block, to an initial state used for training a model from scratch
+        '''
+
+        # Get the required prop
+        configMap = self.configMap
+        n_layer = configMap.n_layer
+        n_vocab = configMap.n_vocab
+        device = configMap.get_device('cpu')
+        dtype = configMap.get_dtype('bfloat16')
+        n_dim = configMap.n_dim
+        
+        # Iterate and reset the blocks
+        for i in range(n_layer):
+            self.blocks[i].init_parameters()
+
+        # Reinit the Embedding layer
+        self.emb = nn.Embedding(n_vocab, n_dim, device=device, dtype=dtype)
+
+        # Reinit the  ln_out and head
+        self.ln_out = nn.LayerNorm(n_dim, device=device, dtype=dtype)
+        self.head = nn.Linear(n_dim, n_vocab, bias=False, device=device, dtype=dtype)
+
+        # Reinit the init state tuning support
+        if configMap.init_state_wkv:
+            stateTuneList = [None]*n_layer
+            for i in range(n_layer):
+                stateTuneList[i] = nn.ParameterDict({
+                    "wkv": nn.Parameter(torch.zeros(n_dim // 64, 64, 64, device=device, dtype=dtype)),
+                })
+            self.init_state = nn.ParameterList(stateTuneList)
+
     def load_from_model_state_dict(self, state_dict: dict, non_blocking:bool=True):
         '''
         Given the Full/partial RWKV model weights, loaded via `torch.load`
