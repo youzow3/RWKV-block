@@ -94,4 +94,8 @@ class RWKV7ChannelMix(torch.nn.Module):
                 continue
 
             # Copy the values from the state_dict
-            current_state_dict[n].copy_(model_state_dict[model_key], non_blocking=non_blocking)
+            try:
+                current_state_dict[n].copy_(model_state_dict[model_key], non_blocking=non_blocking)
+            except Exception as e:
+                print(f"[ERROR] loading: {model_key} | model shape: {current_state_dict[n].shape} | weight shape: {model_state_dict[model_key].shape}")
+                raise e
