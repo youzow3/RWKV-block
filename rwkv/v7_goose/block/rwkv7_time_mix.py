@@ -133,7 +133,7 @@ class RWKV7TimeMix(torch.nn.Module):
         self.output = nn.Linear(n_dim_att, n_dim, bias=False, device=device, dtype=dtype)
         self.ln_x = nn.GroupNorm(n_head, n_dim_att, device=device, dtype=dtype, eps=(1e-5)*head_size)
         
-    def forward(self, x:Tensor, shift_state_in:Tensor, wkv_state_in:Tensor, v_first_state:Tensor) -> tuple[Tensor,Tensor,Tensor,Tensor]:
+    def forward(self, x:Tensor, shift_state_in:Tensor, wkv_state_in:Tensor, v_first_val:Tensor) -> tuple[Tensor,Tensor,Tensor,Tensor]:
         '''
         forwarding time mix given the model weights and the input tokens and states.
         
@@ -142,7 +142,7 @@ class RWKV7TimeMix(torch.nn.Module):
         - Incoming states containing of shapes:
             [batch_size, state_size] ## Token Shift state,
             [batch_size, n_head, head_size, head_size] ## WKV state
-        - Incoming v_first_state of shape [batch_size, seq_len, embedding_size]
+        - Incoming v_first_val of shape [batch_size, seq_len, embedding_size]
         
         
         Returns a pair 
@@ -150,7 +150,7 @@ class RWKV7TimeMix(torch.nn.Module):
         - output state of shapes:
             [batch_size, state_size] ## Token Shift state,
             [batch_size, n_head, head_size, head_size] ## WKV state
-        - output v_first_state of shape [batch_size, seq_len, embedding_size]
+        - output v_first_val of shape [batch_size, seq_len, embedding_size]
         
         '''
         # Get the sizing
@@ -184,9 +184,9 @@ class RWKV7TimeMix(torch.nn.Module):
         k = k * (1 + (a-1) * self.k_a)
 
         if self.layer_id == 0:
-            v_first_state = v # store the v of the first layer
+            v_first_val = v # store the v of the first layer
         else:
-            v = v + (v_first_state - v) * torch.sigmoid(self.v0 + (xv @ self.v1) @ self.v2) # add value residual
+            v = v + (v_first_val - v) * torch.sigmoid(self.v0 + (xv @ self.v1) @ self.v2) # add value residual
 
         tmix_backend = self.tmix_backend
         if tmix_backend == "auto":
@@ -217,26 +217,26 @@ class RWKV7TimeMix(torch.nn.Module):
         xx = xx + ((r.view(BATCH_SIZE,SEQ_LEN,N_HEAD,-1)*k.view(BATCH_SIZE,SEQ_LEN,N_HEAD,-1)*self.r_k).sum(dim=-1, keepdim=True) * v.view(BATCH_SIZE,SEQ_LEN,N_HEAD,-1)).view(BATCH_SIZE,SEQ_LEN,IN_EMB_SIZE)
         xx = self.output(xx * g)
 
-        return xx, shift_state_out, wkv_state_out, v_first_state
+        return xx, shift_state_out, wkv_state_out, v_first_val
 
     @torch.compile(mode="default", fullgraph=True)
-    def forward_with_default_compile(self, in_x:Tensor, shift_state_in:Tensor, wkv_state_in:Tensor, v_first_state_in:Tensor, out_x:Tensor, shift_state_out:Tensor, wkv_state_out:Tensor, v_first_state_out:Tensor) -> tuple[Tensor,Tensor,Tensor]:
+    def forward_with_default_compile(self, in_x:Tensor, shift_state_in:Tensor, wkv_state_in:Tensor, v_first_val_in:Tensor, out_x:Tensor, shift_state_out:Tensor, wkv_state_out:Tensor, v_first_val_out:Tensor) -> tuple[Tensor,Tensor,Tensor]:
         '''
         Compiled varient of the forward function
         With no new tensors being created for the output
         Useful for static memory allocation optimizations inference
         '''
-        out_x[:], shift_state_out[:], wkv_state_out[:], v_first_state_out[:] = self.forward(in_x, shift_state_in, wkv_state_in, v_first_state_in)
-        return out_x, shift_state_out, wkv_state_out, v_first_state_out
+        out_x[:], shift_state_out[:], wkv_state_out[:], v_first_val_out[:] = self.forward(in_x, shift_state_in, wkv_state_in, v_first_val_in)
+        return out_x, shift_state_out, wkv_state_out, v_first_val_out
 
     @torch.compile(mode="reduce-overhead", fullgraph=True)
-    def forward_with_reduce_compile(self, in_x:Tensor, shift_state_in:Tensor, wkv_state_in:Tensor, v_first_state:Tensor) -> tuple[Tensor,Tensor,Tensor]:
+    def forward_with_reduce_compile(self, in_x:Tensor, shift_state_in:Tensor, wkv_state_in:Tensor, v_first_val:Tensor) -> tuple[Tensor,Tensor,Tensor]:
         '''
         Compiled varient of the forward function
         With no input tensor being modified. 
         Useful for reduce-overhead compile mode
         '''
-        return self.forward(in_x, shift_state_in, wkv_state_in, v_first_state)
+        return self.forward(in_x, shift_state_in, wkv_state_in, v_first_val)
     
     # ---------------------------------
     #
