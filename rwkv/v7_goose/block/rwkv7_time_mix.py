@@ -131,7 +131,7 @@ class RWKV7TimeMix(torch.nn.Module):
         self.value = nn.Linear(n_dim, n_dim_att, bias=False, device=device, dtype=dtype)
         self.gate = nn.Linear(n_dim, n_dim_att, bias=False, device=device, dtype=dtype)
         self.output = nn.Linear(n_dim_att, n_dim, bias=False, device=device, dtype=dtype)
-        self.ln_x = nn.GroupNorm(n_head, n_dim_att, device=device, dtype=dtype, eps=(1e-5)*(head_size_divisor**2))
+        self.ln_x = nn.GroupNorm(n_head, n_dim_att, device=device, dtype=dtype, eps=(1e-5)*head_size)
         
     def forward(self, x:Tensor, shift_state_in:Tensor, wkv_state_in:Tensor, v_first_state:Tensor) -> tuple[Tensor,Tensor,Tensor,Tensor]:
         '''
