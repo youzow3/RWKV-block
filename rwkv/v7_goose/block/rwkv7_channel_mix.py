@@ -90,6 +90,7 @@ class RWKV7ChannelMix(torch.nn.Module):
 
         return self.value(k), x[:,-1]
 
+    @torch.compile(mode="default", fullgraph=True)
     def forward_with_default_compile(self, in_x: torch.Tensor, in_state: torch.Tensor, out_x: torch.Tensor, out_state: torch.Tensor) -> tuple[torch.Tensor,torch.Tensor]:
         '''
         Compiled varient of the forward function
