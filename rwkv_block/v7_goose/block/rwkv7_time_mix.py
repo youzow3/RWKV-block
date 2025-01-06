@@ -288,7 +288,7 @@ class RWKV7TimeMix(torch.nn.Module):
             xx, wkv_state_out = rwkv7_attn_pytorch(r, w, k, v, kk, a, BATCH_SIZE, SEQ_LEN, IN_EMB_SIZE, N_HEAD, HEAD_SIZE, x, xx, wkv_state_in) 
         elif tmix_backend == "triton":
             w = -F.softplus(-(self.w0 + w)) - 0.5
-            xx, wkv_state_out = rwkv7_attn_triton(r, w, k, v, -kk, kk*a, s0=wkv_state_in)
+            xx, wkv_state_out = rwkv7_attn_triton(r, w, k, v, -kk, (kk*a), s0=wkv_state_in)
         else:
             raise ValueError(f"Unknown tmix_backend: {tmix_backend}")
 
@@ -305,7 +305,7 @@ class RWKV7TimeMix(torch.nn.Module):
         return xx, shift_state_out, wkv_state_out, v_first_val
 
     @torch.compile(mode="default")
-    def forward_with_default_compile(self, in_x:Tensor, shift_state_in:Tensor, wkv_state_in:Tensor, v_first_val_in:Tensor, out_x:Tensor, shift_state_out:Tensor, wkv_state_out:Tensor, v_first_val_out:Tensor) -> tuple[Tensor,Tensor,Tensor]:
+    def forward_with_default_compile(self, in_x:Tensor, shift_state_in:Tensor, wkv_state_in:Tensor, v_first_val_in:Tensor, out_x:Tensor, shift_state_out:Tensor, wkv_state_out:Tensor, v_first_val_out:Tensor) -> tuple[Tensor,Tensor,Tensor,Tensor]:
         '''
         Compiled varient of the forward function
         With no new tensors being created for the output
@@ -315,7 +315,7 @@ class RWKV7TimeMix(torch.nn.Module):
         return out_x, shift_state_out, wkv_state_out, v_first_val_out
 
     @torch.compile(mode="reduce-overhead")
-    def forward_with_reduce_compile(self, in_x:Tensor, shift_state_in:Tensor, wkv_state_in:Tensor, v_first_val:Tensor) -> tuple[Tensor,Tensor,Tensor]:
+    def forward_with_reduce_compile(self, in_x:Tensor, shift_state_in:Tensor, wkv_state_in:Tensor, v_first_val:Tensor) -> tuple[Tensor,Tensor,Tensor,Tensor]:
         '''
         Compiled varient of the forward function
         With no input tensor being modified. 
