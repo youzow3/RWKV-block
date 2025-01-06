@@ -248,7 +248,7 @@ class RWKV7TimeMix(torch.nn.Module):
         ##########
 
         shift_state_out = x[:, -1]
-        dxprev = torch.concat((shift_state_in.unsqueeze(1), x[:, :-1]), dim=1) - x
+        dxprev = torch.cat((shift_state_in.unsqueeze(1), x[:, :-1]), dim=1) - x
 
         xr = x + dxprev * self.x_r
         xw = x + dxprev * self.x_w
