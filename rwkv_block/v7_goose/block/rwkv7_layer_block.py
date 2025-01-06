@@ -98,21 +98,22 @@ class RWKV7LayerBlock(torch.nn.Module):
         # x = x.to(self.ln1.weight.device)
         # last_state = [ s.to(self.ln1.weight.device) for s in last_state ]
 
-        x = self.ln0(x)
+        # Note, that this only applies for layer 0
+        ln0_out = self.ln0(x)
 
         # assert self.ln1(x) is not None
         # assert last_state.tmix_shift is not None
         # assert last_state.tmix_wkv is not None
 
         att_out, tmix_shift, tmix_wkv, v_first = self.att(
-            self.ln1(x),
+            self.ln1(ln0_out),
             last_state[0], # tmix_shift,
             last_state[1], # tmix_wkv
             v_first
         )
 
         # x = x + att_out
-        x = self.drop0(x + att_out)
+        x = self.drop0(ln0_out + att_out)
 
         ffn_out, ffn_state = self.ffn(
             self.ln2(x),
