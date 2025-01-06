@@ -1,6 +1,7 @@
 # [WIP] RWKV: Receptive Key Weight Value
 
 > WIP: This is meant to be reference block implmentaiton for various RWKV modules.
+> It is not considered complete
 
 ## Pytorch design decisions
 
