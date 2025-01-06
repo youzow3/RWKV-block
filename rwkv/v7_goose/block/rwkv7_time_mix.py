@@ -111,7 +111,6 @@ class RWKV7TimeMix(torch.nn.Module):
         self.receptance = nn.Linear(n_dim, n_dim_att, bias=False, device=device, dtype=dtype)
         self.key = nn.Linear(n_dim, n_dim_att, bias=False, device=device, dtype=dtype)
         self.value = nn.Linear(n_dim, n_dim_att, bias=False, device=device, dtype=dtype)
-        self.gate = nn.Linear(n_dim, n_dim_att, bias=False, device=device, dtype=dtype)
         self.output = nn.Linear(n_dim_att, n_dim, bias=False, device=device, dtype=dtype)
         self.ln_x = nn.GroupNorm(n_head, n_dim_att, device=device, dtype=dtype, eps=(1e-5)*head_size)
         
@@ -216,7 +215,6 @@ class RWKV7TimeMix(torch.nn.Module):
         self.receptance = nn.Linear(n_dim, n_dim_att, bias=False, device=device, dtype=dtype)
         self.key = nn.Linear(n_dim, n_dim_att, bias=False, device=device, dtype=dtype)
         self.value = nn.Linear(n_dim, n_dim_att, bias=False, device=device, dtype=dtype)
-        self.gate = nn.Linear(n_dim, n_dim_att, bias=False, device=device, dtype=dtype)
         self.output = nn.Linear(n_dim_att, n_dim, bias=False, device=device, dtype=dtype)
         self.ln_x = nn.GroupNorm(n_head, n_dim_att, device=device, dtype=dtype, eps=(1e-5)*head_size)
 
