@@ -76,7 +76,7 @@ class RWKV7GooseModel(nn.Module):
             stateTuneList = [None]*n_layer
             for i in range(n_layer):
                 stateTuneList[i] = nn.ParameterDict({
-                    "wkv": nn.Parameter(torch.zeros(n_dim // 64, 64, 64, device=device, dtype=dtype)),
+                    "wkv": nn.Parameter(torch.zeros(n_dim // 64, 64, 64, device=device, dtype=torch.float)),
                 })
             self.init_state = nn.ParameterList(stateTuneList)
 
@@ -115,7 +115,8 @@ class RWKV7GooseModel(nn.Module):
             dtype = self.blocks[i].ln1.weight.data.dtype
 
             # Use the saved init_state if enabled
-            wkv_state = torch.zeros(batch_size, n_dim // 64, 64, 64, device=device, dtype=dtype)
+            # TODO: Consider letting the wkv_state dtype be a parameter
+            wkv_state = torch.zeros(batch_size, n_dim // 64, 64, 64, device=device, dtype=torch.float)
             if init_state_wkv and skip_init_state == False:
                 init_wkv = self.init_state[i]["wkv"]
                 for b in range(batch_size):
