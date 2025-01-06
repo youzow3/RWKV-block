@@ -288,7 +288,7 @@ class RWKV7TimeMix(torch.nn.Module):
             xx, wkv_state_out = rwkv7_attn_pytorch(r, w, k, v, kk, a, BATCH_SIZE, SEQ_LEN, IN_EMB_SIZE, N_HEAD, HEAD_SIZE, x, xx, wkv_state_in) 
         elif tmix_backend == "triton":
             w = -F.softplus(-(self.w0 + w)) - 0.5
-            xx, wkv_state_out = rwkv7_attn_triton(r, w, k, v, -kk, (kk*a), s0=wkv_state_in)
+            xx, wkv_state_out = rwkv7_attn_triton(r, w, k, v, -kk, (kk*a), s0=wkv_state_in.clone())
         else:
             raise ValueError(f"Unknown tmix_backend: {tmix_backend}")
 

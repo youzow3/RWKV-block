@@ -84,7 +84,7 @@ class RWKV7ChannelMix(torch.nn.Module):
         ## x070
         ##########
 
-        dxprev = torch.concat((last_state.unsqueeze(1), x[:, :-1]), dim=1) - x
+        dxprev = torch.cat((last_state.unsqueeze(1), x[:, :-1]), dim=1) - x
         xk = x + dxprev * self.x_k
         k = torch.relu( self.key(xk) ) ** 2
 
