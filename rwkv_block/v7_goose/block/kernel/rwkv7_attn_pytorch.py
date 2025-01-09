@@ -59,8 +59,8 @@ def rwkv7_attn_pytorch(
         sta = chunk_count * chunk_size
         end = sta + chunk_remainder
 
-        # xx[:,sta:end], wkv_state_out = rwkv7_attn_pytorch_chunk_with_nocompile(
-        xpart, wkv_state_out = rwkv7_attn_pytorch_chunk_with_nocompile(
+        xx[:,sta:end], wkv_state_out = rwkv7_attn_pytorch_chunk_with_nocompile(
+        # xpart, wkv_state_out = rwkv7_attn_pytorch_chunk_with_nocompile(
             r[:,sta:end],w[:,sta:end],k[:,sta:end],v[:,sta:end], 
             kk[:,sta:end],a[:,sta:end],
             BATCH_SIZE, N_HEAD, HEAD_SIZE,
