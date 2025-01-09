@@ -64,8 +64,8 @@ def rwkv7_attn_pytorch(
             r[:,sta:end],w[:,sta:end],k[:,sta:end],v[:,sta:end], 
             kk[:,sta:end],a[:,sta:end],
             BATCH_SIZE, N_HEAD, HEAD_SIZE,
-            # xx[:,sta:end], wkv_state_out,
-            torch.zeros(B,chunk_remainder,HC, dtype=xx.dtype, device=xx.device), wkv_state_out,
+            xx[:,sta:end], wkv_state_out,
+            # torch.zeros(B,chunk_remainder,HC, dtype=xx.dtype, device=xx.device), wkv_state_out,
             offset=0, chunk_size=chunk_remainder
         )
         # xlist.append(xpart)
