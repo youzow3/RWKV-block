@@ -285,12 +285,16 @@ class RWKV7TimeMix(torch.nn.Module):
             # See: https://github.com/BlinkDL/RWKV-LM/blob/d4c42b2cac10f8f3896ce153e2310dc763662b7a/RWKV-v7/rwkv_v7_demo_fast.py#L238
             ########
             w = torch.exp(-0.606531 * torch.sigmoid((self.w0 + w).float())) # 0.606531 = exp(-0.5)
-            xx, wkv_state_out = rwkv7_attn_pytorch(r, w, k, v, kk, a, BATCH_SIZE, SEQ_LEN, IN_EMB_SIZE, N_HEAD, HEAD_SIZE, x, xx, wkv_state_in) 
+            xx, wkv_state_out = rwkv7_attn_pytorch(r, w, k, v, kk, a, BATCH_SIZE, SEQ_LEN, N_HEAD, HEAD_SIZE, xx, wkv_state_in) 
         elif tmix_backend == "triton":
             w = -F.softplus(-(self.w0 + w)) - 0.5
-            xx, wkv_state_out = rwkv7_attn_triton(r, w, k, v, -kk, (kk*a), s0=wkv_state_in.clone())
+            xx, wkv_state_out = rwkv7_attn_triton(r, w, k, v, kk, a, s0=wkv_state_in.clone())
         else:
             raise ValueError(f"Unknown tmix_backend: {tmix_backend}")
+
+        # wkv_state_in normalization of type
+        if wkv_state_in is not None:
+            wkv_state_out = wkv_state_out.to(wkv_state_in.dtype)
 
         ######## cuda-based method 
         # wkv_state_out = wkv_state_in.clone()

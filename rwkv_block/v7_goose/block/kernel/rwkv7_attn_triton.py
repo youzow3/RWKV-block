@@ -27,6 +27,10 @@ import torch as th
 import triton
 import triton.language as tl
 
+####################################################################################################
+# Triton specific coding (aka mostly songlin stuff)
+####################################################################################################
+
 @triton.jit
 def IND4(a,b,c,d,nb,nc,nd):
     return ((a*nb+b)*nc+c)*nd+d
@@ -212,11 +216,61 @@ def tl_dot(prec:tl.constexpr, a, b):
     else:
         tl.static_assert(False)
 
-def rwkv7_attn_triton(r,w,k,v,a,b, HEAD_SIZE=64, dot_prec='fp32', s0=None):
+####################################################################################################
+# Start of pytorch code
+####################################################################################################
+
+from .rwkv7_attn_pytorch import rwkv7_attn_pytorch_chunk
+
+def rwkv7_attn_triton(r,w,k,v, kk,kk_a, HEAD_SIZE=64, dot_prec='fp32', s0=None):
     B,T,HC = w.shape
+
+    # Check if the chunk is multiple of 16
+    chunk_remainder = T % 16
+
+    # Optimize the call, if chunk is multiple of 16
+    if chunk_remainder == 0:
+        return rwkv7_attn_triton_chunk(r,w,k,v, kk,kk_a, HEAD_SIZE, dot_prec, s0)
+
+    # Initialize the state
     C = HEAD_SIZE
     H = HC//C
+    s0 = th.zeros(B,H,C,C, dtype=th.float,device=w.device) if s0 is None else s0
+
+    # Compute the number of chunks
+    chunks = T // 16
+    si = chunks * 16
+
+    # Get the chunked output
+    chunk_xx, chunk_sT = rwkv7_attn_triton_chunk(
+        r[:,:si],w[:,:si],k[:,:si],v[:,:si], kk[:,:si],kk_a[:,:si],
+        HEAD_SIZE, dot_prec, s0
+    )
+
+    # Get the remainder
+    remain_xx, last_sT = rwkv7_attn_pytorch_chunk(
+        r[:,si:],w[:,si:],k[:,si:],v[:,si:], kk[:,si:],kk_a[:,si:], 
+        B, H, C, torch.zeros(B, chunk_remainder, HC, device=w.device, dtype=w.dtype), 
+        chunk_sT.to(dtype=s0.dtype), chunk_size=chunk_remainder
+    )
+
+    # Concatenate and return results
+    return torch.cat([chunk_xx.to(dtype=w.dtype), remain_xx.to(dtype=w.dtype)], dim=1), last_sT.to(dtype=s0.dtype)
+
+
+def rwkv7_attn_triton_chunk(r,w,k,v, kk,kk_a, HEAD_SIZE=64, dot_prec='fp32', s0=None):
+    '''
+    Triton implementation running in blocks of 16 (hardcoded requirement for the kernel)
+    '''
+    B,T,HC = w.shape
+    assert T % 16 == 0, 'pure triton, only works in multiple of 16'
+    C = HEAD_SIZE
+    H = HC//C
+
+    # Moving the triton specific operations into the chunk steps
+    a,b = -kk, (kk*kk_a)
+
     r,w,k,v,a,b = [i.view(B,T,H,C) for i in [r,w,k,v,a,b]]
-    s0 = th.zeros(B,H,C,C, dtype=th.bfloat16,device=w.device) if s0 is None else s0
+    s0 = th.zeros(B,H,C,C, dtype=th.float,device=w.device) if s0 is None else s0
     xx, sT = TritonRWKV7.apply(w,r,k,v,a,b,s0,dot_prec)
     return xx.view(B,T,HC), sT
