@@ -149,11 +149,12 @@ def rwkv7_attn_pytorch_v2_chunk_w_compile_break(
     full_kk_a_ = (kk * a).view(BATCH_SIZE,SEQ_LEN,N_HEAD,1,HEAD_SIZE)
     full_ab = (-kk).view(BATCH_SIZE,SEQ_LEN,N_HEAD, HEAD_SIZE,1) @ full_kk_a_
 
+    wkv_xx = torch.empty(BATCH_SIZE,SEQ_LEN,N_HEAD,HEAD_SIZE,HEAD_SIZE, dtype=xx.dtype, device=xx.device)
     wkv_xx, wkv_state_out = rwkv7_attn_pytorch_v2_inner_w_compile_break(
         r,w,
         full_vk_, full_ab, 
         BATCH_SIZE, SEQ_LEN, N_HEAD, HEAD_SIZE,
-        torch.empty(BATCH_SIZE,SEQ_LEN,N_HEAD,HEAD_SIZE,HEAD_SIZE, dtype=xx.dtype, device=xx.device), wkv_state_in
+        wkv_xx, wkv_state_in
         # xx, wkv_state_in
     )
 
