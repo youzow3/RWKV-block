@@ -153,7 +153,8 @@ def rwkv7_attn_pytorch_v2_chunk_w_compile_break(
         r,w,
         full_vk_, full_ab, 
         BATCH_SIZE, SEQ_LEN, N_HEAD, HEAD_SIZE,
-        torch.zeros(BATCH_SIZE,SEQ_LEN,N_HEAD,HEAD_SIZE,HEAD_SIZE, dtype=w.dtype, device=w.device), wkv_state_in
+        torch.empty(BATCH_SIZE,SEQ_LEN,N_HEAD,HEAD_SIZE,HEAD_SIZE, dtype=xx.dtype, device=xx.device), wkv_state_in
+        # xx, wkv_state_in
     )
 
     # xx[:,t] = ((wkv_state.to(dtype=xx.dtype) @ r_.view(BATCH_SIZE,N_HEAD,HEAD_SIZE,1)).view(BATCH_SIZE,N_HEAD*HEAD_SIZE))
