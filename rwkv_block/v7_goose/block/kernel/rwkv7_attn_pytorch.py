@@ -19,24 +19,26 @@ def rwkv7_attn_pytorch(
     ###
 
     # # This works, but it has too much of a vram overhead
-    # return rwkv7_attn_pytorch_v2_nocompile(
+    ###
+    # return rwkv7_attn_pytorch_v2_chunk_w_compile_break(
     #     r,w,k,v, kk,a,
     #     BATCH_SIZE, SEQ_LEN, N_HEAD, HEAD_SIZE,
     #     xx, wkv_state_in
     # )
+    ###
 
     # > per 9k chunk, per block, on a 4090 ...
     # > with forward_with_reduce_compile on the timemix ...
     #
     # Somehow...
     # The reference implement takes: 2281ms
-    # The chunked version takes:     141ms  (chunksize 256)
+    # The chunked version takes:     389ms  (chunksize 256)
 
     # Get the shape
     # B,T,HC = w.shape
 
     # Compute the chunks
-    chunk_size = 128
+    chunk_size = 256
     chunk_count = SEQ_LEN // chunk_size
     chunk_remainder = SEQ_LEN % chunk_size
 
@@ -51,8 +53,8 @@ def rwkv7_attn_pytorch(
         sta = i * chunk_size
         end = sta + chunk_size
 
-        xx[:,sta:end], wkv_state_out = rwkv7_attn_pytorch_v2_nocompile(
-        # xpart, wkv_state_out = rwkv7_attn_pytorch_chunk_with_nocompile(
+        xx[:,sta:end], wkv_state_out = rwkv7_attn_pytorch_v2_chunk_w_compile_break(
+        # xpart, wkv_state_out = rwkv7_attn_pytorch_chunk_with_w_compile_break(
             r[:,sta:end],w[:,sta:end],k[:,sta:end],v[:,sta:end], 
             kk[:,sta:end],a[:,sta:end],
             BATCH_SIZE, chunk_size, N_HEAD, HEAD_SIZE,
@@ -66,8 +68,8 @@ def rwkv7_attn_pytorch(
         sta = chunk_count * chunk_size
         end = sta + chunk_remainder
 
-        xx[:,sta:end], wkv_state_out = rwkv7_attn_pytorch_v2_nocompile(
-        # xpart, wkv_state_out = rwkv7_attn_pytorch_chunk_with_nocompile(
+        xx[:,sta:end], wkv_state_out = rwkv7_attn_pytorch_v2_chunk_w_compile_break(
+        # xpart, wkv_state_out = rwkv7_attn_pytorch_chunk_with_w_compile_break(
             r[:,sta:end],w[:,sta:end],k[:,sta:end],v[:,sta:end], 
             kk[:,sta:end],a[:,sta:end],
             BATCH_SIZE, chunk_remainder, N_HEAD, HEAD_SIZE,
@@ -85,20 +87,15 @@ def rwkv7_attn_pytorch(
 
 ####################################################################################################
 # Working reference copy, that has been validated to be "identical" to the reference implementation
-# However this has known pytorch compilation issues, hence the chunk wise version is used instead
+# However this has known pytorch compilation issues, hence the modified chunk wise version is used 
+# instead for an approximate 5x speed up
+####################################################################################################
 @torch.compiler.disable()
 def rwkv7_attn_pytorch_ref(
     r,w,k,v, kk,a, 
     BATCH_SIZE, SEQ_LEN, N_HEAD, HEAD_SIZE,
     xx, wkv_state_in
 ):
-    # > per 9k chunk, per block, on a 4090 ...
-    # > with forward_with_reduce_compile on the timemix ...
-    #
-    # Somehow...
-    # The reference implement takes: 2281ms
-    # The chunked version takes:     141ms  (chunksize 256)
-
     ######## pure pytorch method
     # See: https://github.com/BlinkDL/RWKV-LM/blob/d4c42b2cac10f8f3896ce153e2310dc763662b7a/RWKV-v7/rwkv_v7_demo_fast.py#L238
     ########
@@ -120,7 +117,10 @@ def rwkv7_attn_pytorch_chunk(
     offset=0, chunk_size=16
 ):
     '''
-    Chunked version of the RWKV7 attention, for better performance
+    Chunked version of the RWKV7 attention, for better performance. 
+    If the chunk size is less then 128, this is generally compilable
+
+    This is used by the triton implement, for the remaining % 16 chunks
     '''
     ######## pure pytorch method
     # See: https://github.com/BlinkDL/RWKV-LM/blob/d4c42b2cac10f8f3896ce153e2310dc763662b7a/RWKV-v7/rwkv_v7_demo_fast.py#L238
@@ -136,35 +136,8 @@ def rwkv7_attn_pytorch_chunk(
     wkv_state_out = vk_state.to(dtype=wkv_state_in.dtype)
     return xx, wkv_state_out
 
-def rwkv7_attn_pytorch_v2(
-    r,w,k,v, kk,a, 
-    BATCH_SIZE, SEQ_LEN, N_HEAD, HEAD_SIZE,
-    xx, wkv_state_in
-):
-    '''
-    Chunked version of the RWKV7 attention, for better performance
-    '''
-    vk_state = wkv_state_in.float()
 
-    full_vk_ = v.view(BATCH_SIZE,SEQ_LEN,N_HEAD, HEAD_SIZE,1) @ k.view(BATCH_SIZE,SEQ_LEN,N_HEAD, 1,HEAD_SIZE)
-    full_kk_a_ = (kk * a).view(BATCH_SIZE,SEQ_LEN,N_HEAD,1,HEAD_SIZE)
-    full_ab = (-kk).view(BATCH_SIZE,SEQ_LEN,N_HEAD, HEAD_SIZE,1) @ full_kk_a_
-
-    for t in range(SEQ_LEN):
-        r_, w_, = r[:,t], w[:,t]
-        # k_, v_, kk_, a_ = k[:,t], v[:,t], kk[:,t], a[:,t]
-        # vk = v_.view(BATCH_SIZE,N_HEAD,HEAD_SIZE,1) @ k_.view(BATCH_SIZE,N_HEAD,1,HEAD_SIZE)
-        vk = full_vk_[:,t].view(BATCH_SIZE,N_HEAD,HEAD_SIZE,HEAD_SIZE)
-        # ab = (-kk_).view(BATCH_SIZE,N_HEAD,HEAD_SIZE,1) @ (kk_*a_).view(BATCH_SIZE,N_HEAD,1,HEAD_SIZE)
-        ab = full_ab[:,t].view(BATCH_SIZE,N_HEAD,HEAD_SIZE,HEAD_SIZE)
-
-        vk_state = (vk_state * w_.view(BATCH_SIZE,N_HEAD,1,HEAD_SIZE).float() + vk_state @ ab.float() + vk.float())
-        xx[:,t] = ((vk_state.to(dtype=xx.dtype) @ r_.view(BATCH_SIZE,N_HEAD,HEAD_SIZE,1)).view(BATCH_SIZE,N_HEAD*HEAD_SIZE))
-    wkv_state_out = vk_state.to(dtype=wkv_state_in.dtype)
-    return xx, wkv_state_out
-
-
-def rwkv7_attn_pytorch_v2_nocompile(
+def rwkv7_attn_pytorch_v2_chunk_w_compile_break(
     r,w,k,v, kk,a, 
     BATCH_SIZE, SEQ_LEN, N_HEAD, HEAD_SIZE,
     xx, wkv_state_in
@@ -176,7 +149,7 @@ def rwkv7_attn_pytorch_v2_nocompile(
     full_kk_a_ = (kk * a).view(BATCH_SIZE,SEQ_LEN,N_HEAD,1,HEAD_SIZE)
     full_ab = (-kk).view(BATCH_SIZE,SEQ_LEN,N_HEAD, HEAD_SIZE,1) @ full_kk_a_
 
-    wkv_xx, wkv_state_out = rwkv7_attn_pytorch_v2_inner_nocompile(
+    wkv_xx, wkv_state_out = rwkv7_attn_pytorch_v2_inner_w_compile_break(
         r,w,
         full_vk_, full_ab, 
         BATCH_SIZE, SEQ_LEN, N_HEAD, HEAD_SIZE,
@@ -189,7 +162,7 @@ def rwkv7_attn_pytorch_v2_nocompile(
     return xx, wkv_state_out
 
 @torch.compiler.disable()
-def rwkv7_attn_pytorch_v2_inner_nocompile(
+def rwkv7_attn_pytorch_v2_inner_w_compile_break(
     r, w,
     full_vk_, full_ab, 
     BATCH_SIZE, SEQ_LEN, N_HEAD, HEAD_SIZE,
@@ -204,16 +177,6 @@ def rwkv7_attn_pytorch_v2_inner_nocompile(
         BATCH_SIZE, SEQ_LEN, N_HEAD, HEAD_SIZE,
         xx, wkv_state_in
     )
-
-    # vk_state = wkv_state_in
-    # for t in range(SEQ_LEN):
-    #     r_, w_, = r[:,t], w[:,t]
-    #     vk = full_vk_[:,t].view(BATCH_SIZE,N_HEAD,HEAD_SIZE,HEAD_SIZE)
-    #     ab = full_ab[:,t].view(BATCH_SIZE,N_HEAD,HEAD_SIZE,HEAD_SIZE)
-
-    #     vk_state = (vk_state * w_.view(BATCH_SIZE,N_HEAD,1,HEAD_SIZE).float() + vk_state @ ab.float() + vk.float())
-    #     xx[:,t] = ((vk_state.to(dtype=xx.dtype) @ r_.view(BATCH_SIZE,N_HEAD,HEAD_SIZE,1)).view(BATCH_SIZE,N_HEAD*HEAD_SIZE))
-    # return xx, vk_state
 
 # @torch.compile(fullgraph=True)
 @torch.jit.script
@@ -230,6 +193,7 @@ def rwkv7_attn_pytorch_v2_inner_jit(
     # wkv_state_in = torch.zeros(BATCH_SIZE,N_HEAD,HEAD_SIZE,HEAD_SIZE, dtype=torch.float,device=w.device)
     wkv_state = wkv_state_in
     for t in range(SEQ_LEN):
+        # r_ = r[:,t]
         # w_ = w[:,t]
         # vk = full_vk_[:,t].view(BATCH_SIZE,N_HEAD,HEAD_SIZE,HEAD_SIZE)
         # ab = full_ab[:,t].view(BATCH_SIZE,N_HEAD,HEAD_SIZE,HEAD_SIZE)
@@ -240,52 +204,3 @@ def rwkv7_attn_pytorch_v2_inner_jit(
     #     xx[:,t] = ((wkv_state.to(dtype=xx.dtype) @ r_.view(BATCH_SIZE,N_HEAD,HEAD_SIZE,1)).view(BATCH_SIZE,N_HEAD*HEAD_SIZE))
     # return xx, wkv_state
     
-# @torch.compile(mode="reduce-overhead", fullgraph=True)
-# def rwkv7_attn_pytorch_chunk_with_reduce_compile(
-#     r,w,k,v, kk,a, 
-#     BATCH_SIZE, N_HEAD, HEAD_SIZE,
-#     xx, wkv_state_in,
-#     offset=0, chunk_size=16
-# ):
-#     return rwkv7_attn_pytorch_chunk(
-#         r,w,k,v, kk,a, 
-#         BATCH_SIZE, N_HEAD, HEAD_SIZE,
-#         xx, wkv_state_in,
-#         offset, chunk_size
-#     )
-
-# @torch.compile(fullgraph=True)
-# def rwkv7_attn_pytorch_chunk_with_fullgraph(
-#     r,w,k,v, kk,a, 
-#     BATCH_SIZE, N_HEAD, HEAD_SIZE,
-#     xx, wkv_state_in,
-#     offset=0, chunk_size=16
-# ):
-#     return rwkv7_attn_pytorch_chunk(
-#         r,w,k,v, kk,a, 
-#         BATCH_SIZE, N_HEAD, HEAD_SIZE,
-#         xx, wkv_state_in,
-#         offset, chunk_size
-#     )
-
-# @torch.compiler.disable()
-# def torch_cat_no_compiler(xlist, dim=1):
-#     return torch.cat(xlist, dim=1)
-
-@torch.compiler.disable()
-def rwkv7_attn_pytorch_chunk_with_nocompile(
-    r,w,k,v, kk,a, 
-    BATCH_SIZE, N_HEAD, HEAD_SIZE,
-    xx, wkv_state_in,
-    offset=0, chunk_size=16
-):
-    vk_state = wkv_state_in.float()
-    for i in range(chunk_size):
-        t = offset + i
-        r_, w_, k_, v_, kk_, a_ = r[:,t], w[:,t], k[:,t], v[:,t], kk[:,t], a[:,t]
-        vk = v_.view(BATCH_SIZE,N_HEAD,HEAD_SIZE,1) @ k_.view(BATCH_SIZE,N_HEAD,1,HEAD_SIZE)
-        ab = (-kk_).view(BATCH_SIZE,N_HEAD,HEAD_SIZE,1) @ (kk_*a_).view(BATCH_SIZE,N_HEAD,1,HEAD_SIZE)
-        vk_state = (vk_state * w_.view(BATCH_SIZE,N_HEAD,1,HEAD_SIZE).float() + vk_state @ ab.float() + vk.float())
-        xx[:,t] = (vk_state.to(dtype=xx.dtype) @ r_.view(BATCH_SIZE,N_HEAD,HEAD_SIZE,1)).view(BATCH_SIZE,N_HEAD*HEAD_SIZE)
-    wkv_state_out = vk_state.to(dtype=wkv_state_in.dtype)
-    return xx, wkv_state_out

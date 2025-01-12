@@ -251,7 +251,7 @@ def rwkv7_attn_triton(r,w,k,v, kk,kk_a, HEAD_SIZE=64, dot_prec='fp32', s0=None):
     remain_xx, last_sT = rwkv7_attn_pytorch_chunk(
         r[:,si:],w[:,si:],k[:,si:],v[:,si:], kk[:,si:],kk_a[:,si:], 
         B, H, C, torch.zeros(B, chunk_remainder, HC, device=w.device, dtype=w.dtype), 
-        chunk_sT.to(dtype=s0.dtype), chunk_size=chunk_remainder
+        chunk_sT, chunk_size=chunk_remainder
     )
 
     # Concatenate and return results
