@@ -35,7 +35,7 @@ def rwkv7_attn_pytorch(
     # The chunked version takes:     389ms  (chunksize 256)
 
     # Get the shape
-    # B,T,HC = w.shape
+    B,T,HC = w.shape
 
     # Compute the chunks
     chunk_size = 256
@@ -47,6 +47,7 @@ def rwkv7_attn_pytorch(
 
     # # List of tensor to build
     # xlist = []
+    xx = xx.clone()
 
     # Loop over the chunks
     for i in range(chunk_count):
@@ -58,8 +59,8 @@ def rwkv7_attn_pytorch(
             r[:,sta:end],w[:,sta:end],k[:,sta:end],v[:,sta:end], 
             kk[:,sta:end],a[:,sta:end],
             BATCH_SIZE, chunk_size, N_HEAD, HEAD_SIZE,
-            xx[:,sta:end], wkv_state_out
-            # torch.zeros(B,chunk_size,HC, dtype=xx.dtype, device=xx.device), wkv_state_out
+            # xx[:,sta:end], wkv_state_out
+            torch.zeros(B,chunk_size,HC, dtype=xx.dtype, device=xx.device), wkv_state_out
         )
         # xlist.append(xpart)
 
@@ -74,7 +75,7 @@ def rwkv7_attn_pytorch(
             kk[:,sta:end],a[:,sta:end],
             BATCH_SIZE, chunk_remainder, N_HEAD, HEAD_SIZE,
             xx[:,sta:end], wkv_state_out,
-            # torch.zeros(B,chunk_remainder,HC, dtype=xx.dtype, device=xx.device), wkv_state_out,
+            torch.zeros(B,chunk_remainder,HC, dtype=xx.dtype, device=xx.device), wkv_state_out,
             # offset=0, chunk_size=chunk_remainder
         )
         # xlist.append(xpart)
@@ -200,7 +201,7 @@ def rwkv7_attn_pytorch_v2_inner_jit(
         # vk = full_vk_[:,t].view(BATCH_SIZE,N_HEAD,HEAD_SIZE,HEAD_SIZE)
         # ab = full_ab[:,t].view(BATCH_SIZE,N_HEAD,HEAD_SIZE,HEAD_SIZE)
 
-        wkv_state = (wkv_state * w[:,t].view(BATCH_SIZE,N_HEAD,1,HEAD_SIZE).float() + wkv_state @ full_ab[:,t].view(BATCH_SIZE,N_HEAD,HEAD_SIZE,HEAD_SIZE).float() + full_vk_[:,t].view(BATCH_SIZE,N_HEAD,HEAD_SIZE,HEAD_SIZE).float())
+        wkv_state = (wkv_state * w[:,t].view(BATCH_SIZE,N_HEAD,1,HEAD_SIZE).float() + wkv_state @ full_ab[:,t].view(BATCH_SIZE,N_HEAD,HEAD_SIZE,HEAD_SIZE).float() + full_vk_[:,t].view(BATCH_SIZE,N_HEAD,HEAD_SIZE,HEAD_SIZE).float()).clone()
         wkv_xx[:,t] = wkv_state.to(dtype=w.dtype)
     return wkv_xx, wkv_state
     #     xx[:,t] = ((wkv_state.to(dtype=xx.dtype) @ r_.view(BATCH_SIZE,N_HEAD,HEAD_SIZE,1)).view(BATCH_SIZE,N_HEAD*HEAD_SIZE))
