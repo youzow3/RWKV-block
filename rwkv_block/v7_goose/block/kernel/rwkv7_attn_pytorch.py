@@ -74,7 +74,7 @@ def rwkv7_attn_pytorch(
             r[:,sta:end],w[:,sta:end],k[:,sta:end],v[:,sta:end], 
             kk[:,sta:end],a[:,sta:end],
             BATCH_SIZE, chunk_remainder, N_HEAD, HEAD_SIZE,
-            xx[:,sta:end], wkv_state_out,
+            # xx[:,sta:end], wkv_state_out,
             torch.zeros(B,chunk_remainder,HC, dtype=xx.dtype, device=xx.device), wkv_state_out,
             # offset=0, chunk_size=chunk_remainder
         )
@@ -158,6 +158,11 @@ def rwkv7_attn_pytorch_v2_chunk_w_compile_break(
         wkv_xx, wkv_state_in
         # xx, wkv_state_in
     )
+
+    # if BATCH_SIZE != 1:
+    #     print("BATCH_SIZE != 1 : ", BATCH_SIZE)
+    # if SEQ_LEN != 256:
+    #     print("SEQ_LEN != 256 : ", SEQ_LEN)
 
     # xx[:,t] = ((wkv_state.to(dtype=xx.dtype) @ r_.view(BATCH_SIZE,N_HEAD,HEAD_SIZE,1)).view(BATCH_SIZE,N_HEAD*HEAD_SIZE))
     xx[:] = (wkv_xx.to(dtype=xx.dtype) @ r.view(BATCH_SIZE,SEQ_LEN,N_HEAD,HEAD_SIZE,1)).view(BATCH_SIZE,SEQ_LEN,N_HEAD*HEAD_SIZE)

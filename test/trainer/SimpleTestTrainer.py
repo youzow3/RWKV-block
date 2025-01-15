@@ -36,7 +36,7 @@ class SimpleTestTrainer:
 
             # hf_dataset being tested is expected to have a "text" column, within the "train" split
             # there is no validation split, as we will just be using an average loss
-            hf_dataset="teven/enwiki_100k", 
+            hf_dataset="recursal/SuperWiki-Tiny", 
 
             # We do not implement proper packing logic, so we will use trim all data records to the
             # indicated context length. Min length is set to -1, which defautls to the ctx length
@@ -53,7 +53,7 @@ class SimpleTestTrainer:
             tokenizer_name="EleutherAI/gpt-neox-20b",
             
             # PS: We are expecting this trainer to only run on 4090's
-            batch_size=1, 
+            batch_size=8, 
             learning_rate=0.001, # 1e-3
             num_epochs=1, 
             project_name="RWKV-Block.SimpleTestTrainer"
@@ -161,7 +161,9 @@ class SimpleTestTrainer:
         print("[SimpleTestTrainer] Initializing wandb...")
 
         # Check if wandb is logged in
-        if wandb.run is not None:
+        # if wandb.run is not None:
+        if wandb.login():
+            print("[SimpleTestTrainer] wandb is logged in.")
             wandb.init(project=project_name, config={
                 "model_class": model.__class__.__name__,
                 "dataset": hf_dataset,
@@ -189,8 +191,8 @@ class SimpleTestTrainer:
             self.optimizer.zero_grad()
 
             batch_t_logits, fwd_state = self.model(input_ids)
-            index = batch_t_logits[:,:-1,:].view(-1, batch_t_logits.size(-1))
-            label = input_ids[:,1:].view(-1)
+            index = batch_t_logits[:,:-1,:].reshape(-1, batch_t_logits.size(-1))
+            label = input_ids[:,1:].reshape(-1)
             loss = self.criterion(index, label)
             
             loss.backward()
@@ -219,7 +221,7 @@ class SimpleTestTrainer:
                 input_ids = batch['input_ids'].to(self.device)
 
                 batch_t_logits = self.model(input_ids)
-                loss = self.criterion( batch_t_logits[:,:-1,:].view(-1, batch_t_logits.size(-1)), input_ids[:,1:].view(-1) )
+                loss = self.criterion( batch_t_logits[:,:-1,:].reshape(-1, batch_t_logits.size(-1)), input_ids[:,1:].view(-1) )
 
                 progress.set_postfix(loss=loss.item())
 

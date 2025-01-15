@@ -277,7 +277,7 @@ class RWKV7TimeMix(torch.nn.Module):
         else:
             v = v + (v_first_val - v) * torch.sigmoid(self.v0 + (xv @ self.v1) @ self.v2) # add value residual
 
-        tmix_backend = self.tmix_backend
+        tmix_backend = self.tmix_backend.lower()
         if tmix_backend == "auto":
             if triton is None or self.receptance.weight.device.type == "cpu":
                 tmix_backend = "pytorch"
