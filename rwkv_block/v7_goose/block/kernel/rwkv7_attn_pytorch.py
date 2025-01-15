@@ -121,7 +121,7 @@ def rwkv7_attn_pytorch_chunk(
     Chunked version of the RWKV7 attention, for better performance. 
     If the chunk size is less then 128, this is generally compilable
 
-    This is used by the triton implement, for the remaining % 16 chunks
+    This is used by the triton/cuda implement, for the remaining % 16 chunks
     '''
     ######## pure pytorch method
     # See: https://github.com/BlinkDL/RWKV-LM/blob/d4c42b2cac10f8f3896ce153e2310dc763662b7a/RWKV-v7/rwkv_v7_demo_fast.py#L238

@@ -22,6 +22,9 @@ else:
 from .kernel.rwkv7_attn_pytorch import rwkv7_attn_pytorch
 from .kernel.rwkv7_attn_pytorch import rwkv7_attn_pytorch_ref
 
+# Cuda based method for rwkv attention
+from .kernel.rwkv7_attn_cuda import rwkv7_attn_cuda
+
 class RWKV7TimeMix(torch.nn.Module):
     '''
     Time Mix block for RWKV V7
@@ -295,6 +298,9 @@ class RWKV7TimeMix(torch.nn.Module):
         elif tmix_backend == "triton":
             w = -F.softplus(-(self.w0 + w)) - 0.5
             xx, wkv_state_out = rwkv7_attn_triton(r, w, k, v, kk, a, s0=wkv_state_in.clone())
+        elif tmix_backend == "cuda":
+            w = -F.softplus(-(self.w0 + w)) - 0.5
+            xx, wkv_state_out = rwkv7_attn_cuda(r, w, k, v, kk, kk*a, s0=wkv_state_in.clone())
         else:
             raise ValueError(f"Unknown tmix_backend: {tmix_backend}")
 
