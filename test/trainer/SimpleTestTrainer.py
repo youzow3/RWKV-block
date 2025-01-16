@@ -26,6 +26,9 @@ from transformers import AutoTokenizer
 from datasets import load_dataset
 import wandb
 
+# torch.backends.cudnn.benchmark = True
+# torch.backends.cudnn.enabled = True
+
 class SimpleTestTrainer:
     def __init__(
             self, model, 
@@ -191,7 +194,14 @@ class SimpleTestTrainer:
 
             self.optimizer.zero_grad()
 
-            batch_t_logits, fwd_state = self.model(input_ids)
+            # If using tmix_backend with cuda
+            if "cuda" in self.model.configMap.tmix_backend:
+                # Cuda has some issues with compile now sadly
+                batch_t_logits, fwd_state = self.model.forward(input_ids)
+            else:
+                # Run with compiler
+                ini_state = self.model.get_init_state(input_ids.shape[0])
+                batch_t_logits, fwd_state = self.model.forward_with_reduce_compile(input_ids, ini_state)
 
             assert torch.isnan(input_ids).sum() == 0,      "NaN detected in the input"
             assert torch.isnan(label).sum() == 0,          "NaN detected in the label"
@@ -210,7 +220,6 @@ class SimpleTestTrainer:
             if wandb.run is not None:
                 wandb.log({"train_loss": loss.item()})
             
-
             total_loss += loss.item()
 
         return total_loss / len(self.train_loader)

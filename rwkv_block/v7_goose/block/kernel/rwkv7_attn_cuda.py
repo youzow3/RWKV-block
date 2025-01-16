@@ -72,6 +72,7 @@ class RefCudaWindBackstepping(torch.autograd.Function):
         ref_wkv_cuda_backward(w,q,k,v,z,b, dy,s,sa, dw,dq,dk,dv,dz,db)
         return dw,dq,dk,dv,dz,db
 
+@torch.compiler.disable()
 def rwkv7_attn_cuda_ref(q,w,k,v, kk,kk_a, HEAD_SIZE=64, s0=None):
     # Preload the kernel
     load_ref_wkv_cuda_kernel()
@@ -157,6 +158,7 @@ class CudaWindBackstepping(torch.autograd.Function):
         wkv_cuda_backward(state, w,q,k,v,z,b, dy,s,sa, dw,dq,dk,dv,dz,db)
         return dS0,dw,dq,dk,dv,dz,db
 
+@torch.compiler.disable()
 def rwkv7_attn_cuda(r,w,k,v, kk,kk_a, HEAD_SIZE=64, s0=None):
     # Preload the kernel
     load_wkv_cuda_kernel()

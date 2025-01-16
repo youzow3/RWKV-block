@@ -187,9 +187,11 @@ class RWKV7GooseModel(nn.Module):
                 ret_stateList[i][1][:] = last_block_state[1]
                 ret_stateList[i][2][:] = last_block_state[2]
         else:
+            ret_stateList = [ None for i in range( len(self.blocks) ) ]
             for i, block in enumerate(self.blocks):
                 x_hidden_state = x_hidden_state.to(block.ln1.weight.device, non_blocking=True)
-                x_hidden_state, ret_stateList[i], v_first = block(x_hidden_state, prv_stateList[i], v_first)
+                x_hidden_state, ret_sublist, v_first = block(x_hidden_state, prv_stateList[i], v_first)
+                ret_stateList[i] = ret_sublist
 
         # Final layer norm, and head
         x_hidden_state = x_hidden_state.to(self.ln_out.weight.device, non_blocking=True)
@@ -210,15 +212,15 @@ class RWKV7GooseModel(nn.Module):
         With no new tensors being created for the output
         Useful for static memory allocation optimizations inference
         '''
+        # Forward internally
         return self._forward_internal(idx, prv_stateList, ret_stateList, overwrite_ret_tensor=True)
-
+  
     @torch.compile(mode="reduce-overhead")
     def forward_with_reduce_compile(
         self, in_idx:torch.Tensor, 
         prv_stateList:list[tuple[torch.Tensor,torch.Tensor,torch.Tensor]]
     ) -> tuple[torch.Tensor,list[tuple[torch.Tensor,torch.Tensor,torch.Tensor]]]:
-        # prepare the retstatelist
-        ret_stateList = [ None for i in range(self.configMap.n_layer) ]
-    
-        # Forward internally
-        return self._forward_internal(in_idx, prv_stateList, ret_stateList, overwrite_ret_tensor=False)
+        '''
+        Compiled varient of the forward function, requires previous state to be passed
+        '''
+        return self._forward_internal(in_idx, prv_stateList, None, overwrite_ret_tensor=False)
