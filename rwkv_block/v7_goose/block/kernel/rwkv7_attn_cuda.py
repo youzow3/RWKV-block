@@ -102,7 +102,8 @@ def load_wkv_cuda_kernel(CHUNK_LEN = 16, HEAD_SIZE = 64):
     from torch.utils.cpp_extension import load
 
     # load_name = f"wind_backstepping_C{HEAD_SIZE}_L{CHUNK_LEN}"
-    load_name = f"state_wind_backstepping"
+    load_name = "state_wind_backstepping"
+    load_file = "state_wkv7"
 
     # Check if the load_name is already loaded
     if load_name in torch.ops:
@@ -113,14 +114,13 @@ def load_wkv_cuda_kernel(CHUNK_LEN = 16, HEAD_SIZE = 64):
 
     # Load the kernel, there is some wierd edge condition in compilation,
     # that try catching.... and trying again.... sometimes work?
-    flags = ['-res-usage', f'-D_C_={HEAD_SIZE}', f"-D_CHUNK_LEN_={CHUNK_LEN}", "--use_fast_math", "-O3", "-Xptxas -O3", "--extra-device-vectorization", "--forward-unknown-to-host-compiler"]
-
+    flags = ['-res-usage', f'-D_C_={HEAD_SIZE}', f"-D_CHUNK_LEN_={CHUNK_LEN}", "--use_fast_math", "-O3", "-Xptxas -O3", "--extra-device-vectorization"] # 
     try:
-        load(name=load_name, sources=[f'{this_file_path}/cuda/wkv7_cuda.cu', f'{this_file_path}/cuda/wkv7_op.cpp'], is_python_module=False, verbose=True, extra_cuda_cflags=flags)
+        load(name=load_name, sources=[f'{this_file_path}/cuda/{load_file}_cuda.cu', f'{this_file_path}/cuda/{load_file}_op.cpp'], is_python_module=False, verbose=True, extra_cuda_cflags=flags)
     except Exception as e:
         print("[WARNING] Failed to load the kernel, trying again (sometimes the compiler has wierd race condition)...")
-        time.sleep(1) # Somehow this works, with minor compilation error, that passes on subsequent reruns
-        load(name=load_name, sources=[f'{this_file_path}/cuda/wkv7_cuda.cu', f'{this_file_path}/cuda/wkv7_op.cpp'], is_python_module=False, verbose=True, extra_cuda_cflags=flags)
+        time.sleep(2) # Somehow this works, with minor compilation error, that passes on subsequent reruns
+        load(name=load_name, sources=[f'{this_file_path}/cuda/{load_file}_cuda.cu', f'{this_file_path}/cuda/{load_file}_op.cpp'], is_python_module=False, verbose=True, extra_cuda_cflags=flags)
 
     # Return the loaded kernel
     return torch.ops.state_wind_backstepping
