@@ -30,8 +30,7 @@ def load_ref_wkv_cuda_kernel(CHUNK_LEN = 16, HEAD_SIZE = 64):
 
     # Load the kernel, there is some wierd edge condition in compilation,
     # that try catching.... and trying again.... sometimes work?
-    flags = ['-res-usage', f'-D_C_={HEAD_SIZE}', f"-D_CHUNK_LEN_={CHUNK_LEN}", "--use_fast_math", "-O3", "-Xptxas -O3", "--extra-device-vectorization"] # , "--forward-unknown-to-host-compiler"
-
+    flags = ['-res-usage', f'-D_C_={HEAD_SIZE}', f"-D_CHUNK_LEN_={CHUNK_LEN}", "--use_fast_math", "-O3", "-Xptxas -O3", "--extra-device-vectorization"] # 
     try:
         load(name=load_name, sources=[f'{this_file_path}/cuda/{load_file}_cuda.cu', f'{this_file_path}/cuda/{load_file}_op.cpp'], is_python_module=False, verbose=True, extra_cuda_cflags=flags)
     except Exception as e:
@@ -73,7 +72,7 @@ class RefCudaWindBackstepping(torch.autograd.Function):
         ref_wkv_cuda_backward(w,q,k,v,z,b, dy,s,sa, dw,dq,dk,dv,dz,db)
         return dw,dq,dk,dv,dz,db
 
-def rwkv7_attn_cuda_ref(r,w,k,v, kk,kk_a, HEAD_SIZE=64, s0=None):
+def rwkv7_attn_cuda_ref(q,w,k,v, kk,kk_a, HEAD_SIZE=64, s0=None):
     # Preload the kernel
     load_ref_wkv_cuda_kernel()
 
@@ -89,11 +88,10 @@ def rwkv7_attn_cuda_ref(r,w,k,v, kk,kk_a, HEAD_SIZE=64, s0=None):
     s0 = torch.zeros(B,H,C,C, dtype=torch.float,device=w.device) if s0 is None else s0
     
     # Handling the cuda kernel
-    a,b = -kk, (kk*kk_a)
-    r,w,k,v,a,b = [i.view(B,T,H,C) for i in [r,w,k,v,a,b]]
+    q,w,k,v,a,b = [i.view(B,T,H,C) for i in [q,w,k,v,(-kk),(kk*kk_a)]]
 
     # Forward with backprop
-    xx = RefCudaWindBackstepping.apply(w,r,k,v,a,b)
+    xx = RefCudaWindBackstepping.apply(w,q,k,v,a,b)
     return xx.view(B,T,HC), s0.view(B,H,C,C)
 
 ####################################################################################################
@@ -104,11 +102,11 @@ def load_wkv_cuda_kernel(CHUNK_LEN = 16, HEAD_SIZE = 64):
     from torch.utils.cpp_extension import load
 
     # load_name = f"wind_backstepping_C{HEAD_SIZE}_L{CHUNK_LEN}"
-    load_name = f"wind_backstepping"
+    load_name = f"state_wind_backstepping"
 
     # Check if the load_name is already loaded
     if load_name in torch.ops:
-        return torch.ops.wind_backstepping
+        return torch.ops.state_wind_backstepping
     
     # Get the this script file path, to cmpute the cuda path
     this_file_path = os.path.dirname(os.path.abspath(__file__))
@@ -125,15 +123,15 @@ def load_wkv_cuda_kernel(CHUNK_LEN = 16, HEAD_SIZE = 64):
         load(name=load_name, sources=[f'{this_file_path}/cuda/wkv7_cuda.cu', f'{this_file_path}/cuda/wkv7_op.cpp'], is_python_module=False, verbose=True, extra_cuda_cflags=flags)
 
     # Return the loaded kernel
-    return torch.ops.wind_backstepping
+    return torch.ops.state_wind_backstepping
 
 @torch.compiler.disable()
 def wkv_cuda_forward(state, w,q,k,v,z,b, y,s,sa):
-    torch.ops.wind_backstepping.forward(state, w,q,k,v,z,b, y,s,sa)
+    torch.ops.state_wind_backstepping.forward(state, w,q,k,v,z,b, y,s,sa)
 
 @torch.compiler.disable()
 def wkv_cuda_backward(state, w,q,k,v,z,b, dy,s,sa, dw,dq,dk,dv,dz,db):
-    torch.ops.wind_backstepping.backward(state, w,q,k,v,z,b, dy,s,sa, dw,dq,dk,dv,dz,db)
+    torch.ops.state_wind_backstepping.backward(state, w,q,k,v,z,b, dy,s,sa, dw,dq,dk,dv,dz,db)
 
 class CudaWindBackstepping(torch.autograd.Function):
     @staticmethod

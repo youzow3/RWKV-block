@@ -28,7 +28,7 @@ void backward(torch::Tensor &_state, torch::Tensor &w, torch::Tensor &q, torch::
 //     m.impl("backward", &backward);
 // }
 
-TORCH_LIBRARY(wind_backstepping, m) {
+TORCH_LIBRARY(state_wind_backstepping, m) {
     m.def("forward", forward);
     m.def("backward", backward);
 }

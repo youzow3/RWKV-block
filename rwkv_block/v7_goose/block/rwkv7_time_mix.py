@@ -248,7 +248,10 @@ class RWKV7TimeMix(torch.nn.Module):
         HEAD_SIZE = self.head_size
 
         # Ensure wkv_state_in is initialized
-        wkv_state_in = torch.zeros(BATCH_SIZE,N_HEAD,HEAD_SIZE,HEAD_SIZE, dtype=torch.float,device=w.device) if wkv_state_in is None else wkv_state_in
+        if wkv_state_in is None:
+            wkv_state_in = torch.zeros(BATCH_SIZE,N_HEAD,HEAD_SIZE,HEAD_SIZE, dtype=torch.float,device=w.device)
+        else:
+            wkv_state_in = wkv_state_in.clone()
 
         ##########
         ## x070
@@ -297,13 +300,13 @@ class RWKV7TimeMix(torch.nn.Module):
             xx, wkv_state_out = rwkv7_attn_pytorch(r, w, k, v, kk, a, BATCH_SIZE, SEQ_LEN, N_HEAD, HEAD_SIZE, xx, wkv_state_in) 
         elif tmix_backend == "triton":
             w = -F.softplus(-(self.w0 + w)) - 0.5
-            xx, wkv_state_out = rwkv7_attn_triton(r, w, k, v, kk, a, s0=wkv_state_in.clone())
+            xx, wkv_state_out = rwkv7_attn_triton(r, w, k, v, kk, a, s0=wkv_state_in)
         elif tmix_backend == "cuda_ref":
             w = -F.softplus(-(self.w0 + w)) - 0.5
-            xx, wkv_state_out = rwkv7_attn_cuda_ref(r, w, k, v, kk, kk*a, s0=wkv_state_in.clone())
+            xx, wkv_state_out = rwkv7_attn_cuda_ref(r, w, k, v, kk, a, s0=wkv_state_in)
         elif tmix_backend == "cuda":
             w = -F.softplus(-(self.w0 + w)) - 0.5
-            xx, wkv_state_out = rwkv7_attn_cuda(r, w, k, v, kk, kk*a, s0=wkv_state_in.clone())
+            xx, wkv_state_out = rwkv7_attn_cuda(r, w, k, v, kk, a, s0=wkv_state_in)
         else:
             raise ValueError(f"Unknown tmix_backend: {tmix_backend}")
 

@@ -187,13 +187,20 @@ class SimpleTestTrainer:
         progress = tqdm(self.train_loader, desc="Training")
         for batch in progress:
             input_ids = batch['input_ids'].to(self.device)
+            label = input_ids[:,1:].reshape(-1).clone()
 
             self.optimizer.zero_grad()
 
             batch_t_logits, fwd_state = self.model(input_ids)
+
+            assert torch.isnan(input_ids).sum() == 0,      "NaN detected in the input"
+            assert torch.isnan(label).sum() == 0,          "NaN detected in the label"
+            assert torch.isnan(batch_t_logits).sum() == 0, "NaN detected in the model output"
+
             index = batch_t_logits[:,:-1,:].reshape(-1, batch_t_logits.size(-1))
-            label = input_ids[:,1:].reshape(-1)
             loss = self.criterion(index, label)
+
+            assert torch.isnan(loss).sum() == 0, "Loss is NaN"
             
             loss.backward()
             self.optimizer.step()

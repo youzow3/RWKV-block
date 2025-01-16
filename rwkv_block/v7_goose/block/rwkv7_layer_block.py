@@ -122,7 +122,17 @@ class RWKV7LayerBlock(torch.nn.Module):
 
         # x = x + ffn_out
         x = self.drop1(x + ffn_out)
-        
+
+        # # Debugging for NaN
+        # layer_id = self.configMap.get_layer_id(-1)
+        # assert torch.isnan(att_out).sum() == 0, f'NaN detected att_out @ layer {layer_id}'
+        # assert torch.isnan(ffn_out).sum() == 0, f'NaN detected ffn_out @ layer {layer_id}'
+        # assert torch.isnan(v_first).sum() == 0, f'NaN detected v_first @ layer {layer_id}'
+        # assert torch.isnan(tmix_shift).sum() == 0, f'NaN detected tmix_shift @ layer {layer_id}'
+        # assert torch.isnan(tmix_wkv).sum() == 0, f'NaN detected tmix_wkv @ layer {layer_id}'
+        # assert torch.isnan(ffn_state).sum() == 0, f'NaN detected ffn_state @ layer {layer_id}'
+        # assert torch.isnan(x).sum() == 0, f'NaN detected block out @ layer {layer_id}'
+
         return x, (tmix_shift, tmix_wkv, ffn_state), v_first
     
     @torch.compile(mode="default")
