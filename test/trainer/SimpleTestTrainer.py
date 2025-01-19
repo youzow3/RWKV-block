@@ -54,6 +54,10 @@ class SimpleTestTrainer:
             # RWKV models are by default tagged to the world model, which has a vocab size of 65536
             # You will need to initialize the model with the neox vocab size instead
             tokenizer_name="EleutherAI/gpt-neox-20b",
+
+            # Maximum steps to run, and eval between steps
+            max_train_steps = 50000,
+            val_interval_steps = 1000,
             
             # PS: We are expecting this trainer to only run on 4090's
             batch_size=8, 
@@ -136,18 +140,23 @@ class SimpleTestTrainer:
             self.train_dataset,
             batch_size=batch_size,
             collate_fn=collate_fn,
-            drop_last=True,
             pin_memory=True,
-            pin_memory_device=device
+            pin_memory_device=device,
+            drop_last=True
         )
         self.val_loader = DataLoader(
             self.val_dataset,
             batch_size=batch_size,
             collate_fn=collate_fn,
-            drop_last=True,
             pin_memory=True,
-            pin_memory_device=device
+            pin_memory_device=device,
+            drop_last=True
         )
+
+        # Trim down max steps
+        if max_train_steps > - 1:
+            self.train_loader = self.train_loader[: max_train_steps]
+        self.val_interval_steps = val_interval_steps
 
         # Log the batch sizes
         print("[SimpleTestTrainer] Training batch count:   ", len(self.train_loader))
@@ -187,6 +196,7 @@ class SimpleTestTrainer:
         self.model.train()
         total_loss = 0
 
+        steps = 0
         progress = tqdm(self.train_loader, desc="Training")
         for batch in progress:
             input_ids = batch['input_ids'].to(self.device)
@@ -217,37 +227,74 @@ class SimpleTestTrainer:
 
             # Logging
             progress.set_postfix(loss=loss.item())
-            if wandb.run is not None:
-                wandb.log({"train_loss": loss.item()})
-            
+
+            # val_interval_steps defaults to 10000
+            val_interval_steps = self.val_interval_steps
+
+            # Call the validation step every 10k steps
+            if val_interval_steps > 0 and steps % val_interval_steps == 0:
+                val_loss = self.run_validation(progress)
+                progress.set_postfix(last_val_loss=val_loss)
+
+                if wandb.run is not None:
+                    wandb.log({"train_loss": loss.item(), "val_loss": val_loss})
+            else:
+                if wandb.run is not None:
+                    wandb.log({"train_loss": loss.item()})
+
+            steps += 1
             total_loss += loss.item()
 
         return total_loss / len(self.train_loader)
 
-    def run_validation(self):
+    def run_validation(self, prg):
         if not self.val_loader:
             return None
 
         self.model.eval()
         total_loss = 0
 
-        progress = tqdm(self.val_loader, desc="Validating")
+        # progress = tqdm(self.val_loader, desc="Validating")
         with torch.no_grad():
-            for batch in progress:
+            for batch in self.val_loader:
                 input_ids = batch['input_ids'].to(self.device)
+                label = input_ids[:,1:].reshape(-1).clone()
 
-                batch_t_logits = self.model(input_ids)
-                loss = self.criterion( batch_t_logits[:,:-1,:].reshape(-1, batch_t_logits.size(-1)), input_ids[:,1:].view(-1) )
+                # If using tmix_backend with cuda
+                if "cuda" in self.model.configMap.tmix_backend:
+                    # Cuda has some issues with compile now sadly
+                    batch_t_logits, fwd_state = self.model.forward(input_ids)
+                else:
+                    # Run with compiler
+                    ini_state = self.model.get_init_state(input_ids.shape[0])
+                    batch_t_logits, fwd_state = self.model.forward_with_reduce_compile(input_ids, ini_state)
 
-                progress.set_postfix(loss=loss.item())
+                assert torch.isnan(input_ids).sum() == 0,      "NaN detected in the input"
+                assert torch.isnan(label).sum() == 0,          "NaN detected in the label"
+                assert torch.isnan(batch_t_logits).sum() == 0, "NaN detected in the model output"
 
-                # Log to wandb
-                if wandb.run is not None:
-                    wandb.log({"val_loss": loss.item()})
+                index = batch_t_logits[:,:-1,:].reshape(-1, batch_t_logits.size(-1))
+                loss = self.criterion(index, label)
+
+                assert torch.isnan(loss).sum() == 0, "Loss is NaN"
+                
+                if prg is not None:
+                    prg.set_postfix(step_val_loss=loss.item())
+
+                # # Log to wandb
+                # if wandb.run is not None:
+                #     wandb.log({"val_loss": loss.item()})
                 
                 total_loss += loss.item()
 
-        return total_loss / len(self.val_loader)
+        mean_val_loss = total_loss / len(self.val_loader)
+
+        # # Log the validation loss
+        # print(f"Validation Loss: {mean_val_loss:.4f}")
+        # if wandb.run is not None:
+        #     wandb.log({"val_loss": loss.item()})
+
+        return mean_val_loss
 
     def train(self):
         for epoch in range(self.num_epochs):
@@ -256,11 +303,7 @@ class SimpleTestTrainer:
             epoch_val_loss = self.validate()
 
             print(f"Training Loss: {epoch_train_loss:.4f}")
-            log_dict = {"epoch_train_loss": epoch_train_loss, "epoch": epoch + 1}
-
-            if epoch_val_loss is not None:
-                print(f"Validation Loss: {epoch_val_loss:.4f}")
-                log_dict["epoch_val_loss"] = epoch_val_loss
+            log_dict = {"epoch_train_loss": epoch_train_loss, "epoch": epoch + 1, "epoch_val_loss": epoch_val_loss}
 
             # Log to wandb
             if wandb.run is not None:
