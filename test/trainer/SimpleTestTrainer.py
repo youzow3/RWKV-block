@@ -136,14 +136,28 @@ class SimpleTestTrainer:
             # attention_mask = torch.tensor([item['attention_mask'] for item in batch])
             # return { 'input_ids': input_ids, 'attention_mask': attention_mask }
 
-        self.train_loader = DataLoader(
-            self.train_dataset,
-            batch_size=batch_size,
-            collate_fn=collate_fn,
-            pin_memory=True,
-            pin_memory_device=device,
-            drop_last=True
-        )
+        # Trim down max steps
+        self.val_interval_steps = val_interval_steps
+        if max_train_steps > - 1:
+            self.train_loader = DataLoader(
+                # Get the max_train_steps worth of dataset 
+                self.train_dataset.select(range(max_train_steps * batch_size)),
+                batch_size=batch_size,
+                collate_fn=collate_fn,
+                pin_memory=True,
+                pin_memory_device=device,
+                drop_last=True
+            )
+        else:
+            self.train_loader = DataLoader(
+                self.train_dataset,
+                batch_size=batch_size,
+                collate_fn=collate_fn,
+                pin_memory=True,
+                pin_memory_device=device,
+                drop_last=True
+            )
+
         self.val_loader = DataLoader(
             self.val_dataset,
             batch_size=batch_size,
@@ -152,11 +166,6 @@ class SimpleTestTrainer:
             pin_memory_device=device,
             drop_last=True
         )
-
-        # Trim down max steps
-        if max_train_steps > - 1:
-            self.train_loader = self.train_loader[: max_train_steps]
-        self.val_interval_steps = val_interval_steps
 
         # Log the batch sizes
         print("[SimpleTestTrainer] Training batch count:   ", len(self.train_loader))
