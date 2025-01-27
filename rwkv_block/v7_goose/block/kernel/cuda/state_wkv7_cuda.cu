@@ -59,6 +59,7 @@ __global__ void forward_kernel(int T, int H, float*_state, F_ w_, F_ q_, F_ k_, 
     for (int j = 0; j < C; j++) {
         _state[j] = state[j];
     }
+    __syncthreads();
 }
 
 __global__ void backward_kernel(int T, int H, float*_state, F_ w_, F_ q_, F_ k_, F_ v_, F_ a_, F_ b_, F_ dy_, float * __restrict__ s_, float * __restrict__ sa_, bf* dw_, bf* dq_, bf* dk_, bf* dv_, bf* da_, bf* db_) {

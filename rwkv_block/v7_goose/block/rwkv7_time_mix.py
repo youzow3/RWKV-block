@@ -283,12 +283,19 @@ class RWKV7TimeMix(torch.nn.Module):
             else:
                 tmix_backend = "triton"
 
-        if tmix_backend == "pytorch_ref":
+        if tmix_backend == "pytorch_ref" or tmix_backend == "pytorch_ref_ori":
             # Pure pytorch mode for rwkv attention
             from .kernel.rwkv7_attn_pytorch import rwkv7_attn_pytorch_ref
             # Reference minimal compilation version
             w = torch.exp(-0.606531 * torch.sigmoid((self.w0 + w).float())) # 0.606531 = exp(-0.5)
             xx, wkv_state_out = rwkv7_attn_pytorch_ref(r, w, k, v, kk, iclr, BATCH_SIZE, SEQ_LEN, N_HEAD, HEAD_SIZE, xx, wkv_state_in) 
+        elif tmix_backend == "pytorch_ref_fp32":
+            # Pure pytorch mode for rwkv attention
+            from .kernel.rwkv7_attn_pytorch import rwkv7_attn_pytorch_ref_fp32
+            # Modified to follow the same logic as "cuda" version
+            # w = torch.exp(-0.606531 * torch.sigmoid((self.w0 + w).float())) # 0.606531 = exp(-0.5)
+            w = -F.softplus(-(self.w0 + w)) - 0.5
+            xx, wkv_state_out = rwkv7_attn_pytorch_ref_fp32(r, w, k, v, kk, iclr, BATCH_SIZE, SEQ_LEN, N_HEAD, HEAD_SIZE, xx, wkv_state_in) 
         elif tmix_backend == "pytorch":
             # Pure pytorch mode for rwkv attention
             from .kernel.rwkv7_attn_pytorch import rwkv7_attn_pytorch
