@@ -12,9 +12,10 @@ __global__ void forward_kernel(int T, int H, float*_state, F_ w_, F_ q_, F_ k_, 
     int bb = blockIdx.y, hh = blockIdx.x, i = threadIdx.x;
 
     float state[C] = {0};
+    int s_idx = bb*H*C*C + hh*C*C + i*C;
     #pragma unroll
     for (int j = 0; j < C; j++) {
-        state[j] = _state[j];
+        state[j] = _state[s_idx+j];
     }
 
     __shared__ float q[C], k[C], w[C], a[C], b[C];
@@ -57,7 +58,7 @@ __global__ void forward_kernel(int T, int H, float*_state, F_ w_, F_ q_, F_ k_, 
 
     #pragma unroll
     for (int j = 0; j < C; j++) {
-        _state[j] = state[j];
+        _state[s_idx+j] = state[j];
     }
     __syncthreads();
 }
