@@ -1,4 +1,4 @@
-# [WIP] RWKV: Receptive Key Weight Value
+# [WIP] RWKV: Receptive Weighted Key Value
 
 > WIP: This is meant to be reference block implmentaiton for various RWKV modules.
 > It is not considered complete
