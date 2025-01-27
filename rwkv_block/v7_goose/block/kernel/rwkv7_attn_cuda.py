@@ -73,7 +73,7 @@ class RefCudaWindBackstepping(torch.autograd.Function):
         return dw,dq,dk,dv,dz,db
 
 @torch.compiler.disable()
-def rwkv7_attn_cuda_ref(q,w,k,v, kk,kk_a, HEAD_SIZE=64, s0=None):
+def rwkv7_attn_cuda_ref(q,w,k,v, kk,iclr, HEAD_SIZE=64, s0=None):
     # Preload the kernel
     load_ref_wkv_cuda_kernel()
 
@@ -89,7 +89,7 @@ def rwkv7_attn_cuda_ref(q,w,k,v, kk,kk_a, HEAD_SIZE=64, s0=None):
     s0 = torch.zeros(B,H,C,C, dtype=torch.float,device=w.device) if s0 is None else s0
     
     # Handling the cuda kernel
-    q,w,k,v,a,b = [i.view(B,T,H,C) for i in [q,w,k,v,(-kk),(kk*kk_a)]]
+    q,w,k,v,a,b = [i.view(B,T,H,C) for i in [q,w,k,v,(-kk),(kk*iclr)]]
 
     # Forward with backprop
     xx = RefCudaWindBackstepping.apply(w,q,k,v,a,b)
@@ -159,7 +159,7 @@ class CudaWindBackstepping(torch.autograd.Function):
         return dS0,dw,dq,dk,dv,dz,db
 
 @torch.compiler.disable()
-def rwkv7_attn_cuda(r,w,k,v, kk,kk_a, HEAD_SIZE=64, s0=None):
+def rwkv7_attn_cuda(r,w,k,v, kk,iclr, HEAD_SIZE=64, s0=None):
     # Preload the kernel
     load_wkv_cuda_kernel()
 
@@ -179,7 +179,7 @@ def rwkv7_attn_cuda(r,w,k,v, kk,kk_a, HEAD_SIZE=64, s0=None):
 
     # Optimize the call, if chunk is multiple of 16
     if chunk_remainder == 0:
-        chunk_xx, chunk_sT = rwkv7_attn_cuda_chunk(r,w,k,v, kk,kk_a, HEAD_SIZE, sT)
+        chunk_xx, chunk_sT = rwkv7_attn_cuda_chunk(r,w,k,v, kk,iclr, HEAD_SIZE, sT)
         return chunk_xx, chunk_sT.to(dtype=s0.dtype)
 
     # Compute the number of chunks
@@ -188,13 +188,13 @@ def rwkv7_attn_cuda(r,w,k,v, kk,kk_a, HEAD_SIZE=64, s0=None):
 
     # Get the chunked output
     chunk_xx, chunk_sT = rwkv7_attn_cuda_chunk(
-        r[:,:si],w[:,:si],k[:,:si],v[:,:si], kk[:,:si],kk_a[:,:si],
+        r[:,:si],w[:,:si],k[:,:si],v[:,:si], kk[:,:si],iclr[:,:si],
         HEAD_SIZE, s0
     )
 
     # Get the remainder
     remain_xx, last_sT = rwkv7_attn_pytorch_chunk(
-        r[:,si:],w[:,si:],k[:,si:],v[:,si:], kk[:,si:],kk_a[:,si:], 
+        r[:,si:],torch.exp(-torch.exp(w[:,si:])),k[:,si:],v[:,si:], kk[:,si:],iclr[:,si:], 
         B, H, C, 
         torch.zeros(B, chunk_remainder, HC, device=w.device, dtype=w.dtype), 
         chunk_sT, chunk_size=chunk_remainder
@@ -204,7 +204,7 @@ def rwkv7_attn_cuda(r,w,k,v, kk,kk_a, HEAD_SIZE=64, s0=None):
     return torch.cat([chunk_xx.to(dtype=w.dtype), remain_xx.to(dtype=w.dtype)], dim=1), last_sT.to(dtype=s0.dtype)
 
 
-def rwkv7_attn_cuda_chunk(r,w,k,v, kk,kk_a, HEAD_SIZE=64, s0=None):
+def rwkv7_attn_cuda_chunk(r,w,k,v, kk,iclr, HEAD_SIZE=64, s0=None):
     '''
     Triton implementation running in blocks of 16 (hardcoded requirement for the kernel)
     '''
@@ -214,7 +214,7 @@ def rwkv7_attn_cuda_chunk(r,w,k,v, kk,kk_a, HEAD_SIZE=64, s0=None):
     H = HC//C
 
     # Handling the cuda kernel
-    a,b = -kk, (kk*kk_a)
+    a,b = -kk, (kk*iclr)
     r,w,k,v,a,b = [i.view(B,T,H,C) for i in [r,w,k,v,a,b]]
 
     if s0 is None:

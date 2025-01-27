@@ -18,13 +18,6 @@ if torch.cuda.is_available():
 else:
     print("[WARNING] Triton not available, falling back to pytorch mode by default - this is significantly slower")
 
-# Pure pytorch mode for rwkv attention
-from .kernel.rwkv7_attn_pytorch import rwkv7_attn_pytorch
-from .kernel.rwkv7_attn_pytorch import rwkv7_attn_pytorch_ref
-
-# Cuda based method for rwkv attention
-from .kernel.rwkv7_attn_cuda import rwkv7_attn_cuda, rwkv7_attn_cuda_ref
-
 class RWKV7TimeMix(torch.nn.Module):
     '''
     Time Mix block for RWKV V7
@@ -272,11 +265,11 @@ class RWKV7TimeMix(torch.nn.Module):
         w = torch.tanh(xw @ self.w1) @ self.w2
         k = self.key(xk)
         v = self.value(xv)
-        a = torch.sigmoid(self.a0 + (xa @ self.a1) @ self.a2) # a is "in-context learning rate"
         g = torch.sigmoid(xg @ self.g1) @ self.g2
+        iclr = torch.sigmoid(self.a0 + (xa @ self.a1) @ self.a2) # a is "in-context learning rate"
 
         kk = F.normalize((k * self.k_k).view(BATCH_SIZE,SEQ_LEN,N_HEAD,-1), dim=-1, p=2.0).view(BATCH_SIZE, SEQ_LEN, IN_EMB_SIZE)
-        k = k * (1 + (a-1) * self.k_a)
+        k = k * (1 + (iclr-1) * self.k_a)
 
         if self.layer_id == 0:
             v_first_val = v # store the v of the first layer
@@ -291,22 +284,38 @@ class RWKV7TimeMix(torch.nn.Module):
                 tmix_backend = "triton"
 
         if tmix_backend == "pytorch_ref":
+            # Pure pytorch mode for rwkv attention
+            from .kernel.rwkv7_attn_pytorch import rwkv7_attn_pytorch_ref
             # Reference minimal compilation version
             w = torch.exp(-0.606531 * torch.sigmoid((self.w0 + w).float())) # 0.606531 = exp(-0.5)
-            xx, wkv_state_out = rwkv7_attn_pytorch_ref(r, w, k, v, kk, a, BATCH_SIZE, SEQ_LEN, N_HEAD, HEAD_SIZE, xx, wkv_state_in) 
+            xx, wkv_state_out = rwkv7_attn_pytorch_ref(r, w, k, v, kk, iclr, BATCH_SIZE, SEQ_LEN, N_HEAD, HEAD_SIZE, xx, wkv_state_in) 
         elif tmix_backend == "pytorch":
+            # Pure pytorch mode for rwkv attention
+            from .kernel.rwkv7_attn_pytorch import rwkv7_attn_pytorch
             # Tweaked pytorch compile varient
             w = torch.exp(-0.606531 * torch.sigmoid((self.w0 + w).float())) # 0.606531 = exp(-0.5)
-            xx, wkv_state_out = rwkv7_attn_pytorch(r, w, k, v, kk, a, BATCH_SIZE, SEQ_LEN, N_HEAD, HEAD_SIZE, xx, wkv_state_in) 
+            xx, wkv_state_out = rwkv7_attn_pytorch(r, w, k, v, kk, iclr, BATCH_SIZE, SEQ_LEN, N_HEAD, HEAD_SIZE, xx, wkv_state_in) 
         elif tmix_backend == "triton":
             w = -F.softplus(-(self.w0 + w)) - 0.5
-            xx, wkv_state_out = rwkv7_attn_triton(r, w, k, v, kk, a, s0=wkv_state_in)
+            xx, wkv_state_out = rwkv7_attn_triton(r, w, k, v, kk, iclr, s0=wkv_state_in)
         elif tmix_backend == "cuda_ref":
+            # Cuda based method for rwkv attention
+            from .kernel.rwkv7_attn_cuda import rwkv7_attn_cuda_ref
+            # Reference cuda version (no state output)
             w = -F.softplus(-(self.w0 + w)) - 0.5
-            xx, wkv_state_out = rwkv7_attn_cuda_ref(r, w, k, v, kk, a, s0=wkv_state_in)
+            xx, wkv_state_out = rwkv7_attn_cuda_ref(r, w, k, v, kk, iclr, s0=wkv_state_in)
         elif tmix_backend == "cuda":
+            # Cuda based method for rwkv attention
+            from .kernel.rwkv7_attn_cuda import rwkv7_attn_cuda
+            # Modified cuda version (with state output)
             w = -F.softplus(-(self.w0 + w)) - 0.5
-            xx, wkv_state_out = rwkv7_attn_cuda(r, w, k, v, kk, a, s0=wkv_state_in)
+            xx, wkv_state_out = rwkv7_attn_cuda(r, w, k, v, kk, iclr, s0=wkv_state_in)
+        elif tmix_backend == "fla":
+            # FLA based method for rwkv attention
+            from .kernel.rwkv7_attn_fla import rwkv7_attn_fla
+            # FLA runs with the softplus w
+            w = -F.softplus(-(self.w0 + w)) - 0.5
+            xx, wkv_state_out = rwkv7_attn_fla(r, w, k, v, kk, iclr, BATCH_SIZE, SEQ_LEN, N_HEAD, HEAD_SIZE, xx, wkv_state_in) 
         else:
             raise ValueError(f"Unknown tmix_backend: {tmix_backend}")
 
