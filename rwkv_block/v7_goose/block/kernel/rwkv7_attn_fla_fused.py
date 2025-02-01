@@ -8,7 +8,7 @@ def rwkv7_attn_fused_reccurent_fla(
 ):
     # Preprocessing the FLA
     r,w,k,v,a,b = [i.view(BATCH_SIZE,SEQ_LEN,N_HEAD,-1) for i in [r,w,k,v,-kk,(kk*iclr)]]
-    log_w = -w.float().exp().to(r)
+    log_w = -w.float().exp()
 
     # Run the FLA
     output, vk_state = fused_recurrent_rwkv7(r=r, log_w=log_w, k=k, v=v, a=a, b=b, initial_state=wkv_state_in.float(), output_final_state=True)
