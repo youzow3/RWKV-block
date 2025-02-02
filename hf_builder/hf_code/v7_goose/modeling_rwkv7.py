@@ -38,8 +38,8 @@ class RWKV7PreTrainedModel(PreTrainedModel,RWKV7GooseModel):
 
     def __init__(self, config: RWKV7Config):
         RWKV7GooseModel.__init__(self, config)
-        self.config = config # This is required for HF
-
+        self.config = config
+        
     def _init_weights(
         self,
         module

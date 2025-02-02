@@ -20,8 +20,7 @@
 # - Load the model weights into the configured model
 # - Save the model to the output directory
 
-import argparse
-import shutil
+import argparse, shutil, json
 from pathlib import Path
 import torch
 from safetensors.torch import load_file, save_file
@@ -52,6 +51,24 @@ def load_model_from_filepath(model_path):
     elif model_path.endswith('.pt') or model_path.endswith('.pth'):
         return torch.load(model_path, map_location='cpu', weights_only=True, mmap=True)
 
+def save_tokenizer_to_output_dir(output_dir, tokenizer_type):
+    # Check if the source directory exists
+    source_dir = Path(f"{current_dir}/hf_code/tokenizer/{tokenizer_type}/")
+    if not source_dir.exists():
+        raise ValueError(f"Tokenizer type '{tokenizer_type}' not found in hf_code/tokenizer directory.")
+    
+    # Copy the tokenizer files to the output directory
+    shutil.copytree(source_dir, output_dir, dirs_exist_ok=True)
+
+def save_model_code_to_output_dir(output_dir, model_class):
+    # Check if the source directory exists
+    source_dir = Path(f"{current_dir}/hf_code/{model_class}")
+    if not source_dir.exists():
+        raise ValueError(f"Model class '{model_class}' not found in hf_code directory.")
+    
+    # Copy the model files to the output directory
+    shutil.copytree(source_dir, output_dir, dirs_exist_ok=True)
+
 ####
 # Builder scripts
 ####
@@ -61,6 +78,7 @@ def hf_builder(args):
     print("Converting RWKV model to HuggingFace format...")
     print(f"Model Class     : {args.model_class}")
     print(f"Model Source    : {args.model_source}")
+    print(f"Tokenizer Type  : {args.tokenizer_type}")
     print(f"Output Directory: {args.output_dir}")
     print("-----------------------------")
 
@@ -84,17 +102,60 @@ def hf_builder(args):
         model_instance = RWKV7PreTrainedModel(model_config)
     else:
         raise ValueError(f"Unsupported model class: {model_class}")
+    
+    # Deduce the tokenizer
+    tokenizer_type = args.tokenizer_type
+    if tokenizer_type == "auto":
+        # Check for world tokenizer
+        if model_config.vocab_size >= 65529 and model_config.vocab_size <= 65536:
+            tokenizer_type = "world"
+        elif model_config.vocab_size >= 50304 and model_config.vocab_size <= 50432:
+            tokenizer_type = "neox"
+        else:
+            raise ValueError(f"Unable to detect tokenizer type for: {tokenizer_type} (vocab_size: {model_config.vocab_size})")
+        
+        # Print the detected tokenizer type
+        print(f"Detected Tokenizer Type: {tokenizer_type}")
 
-    # Load hte model in
+    # Load the model files
     print("Loading model state into class ...")
     model_instance.load_state_dict(state_dict)
 
-    # Save the model in HuggingFace format
-    print("Saving model files ...")
+    # print("-----------------------------")
+    # print("Model Configuration:")
+    # print(model_instance.config)
+    print("-----------------------------")
+
+    print("Saving tokenizer files ...")
     os.makedirs(args.output_dir, exist_ok=True)
+    save_tokenizer_to_output_dir(args.output_dir, tokenizer_type)
+
+    print("Saving model code files ...")
+    save_model_code_to_output_dir(args.output_dir, model_class)
+    
+    print("Saving model weight files ...")
     model_instance.save_pretrained(args.output_dir)
     model_config.save_pretrained(args.output_dir)
 
+    print("Patching configuration ...")
+    config_json_path = Path(f"{args.output_dir}/config.json")
+    config_json = json.load(config_json_path.open())
+
+    # Fill in the auto_map, and architecture
+    if model_class == "v7_goose":
+        config_json["auto_map"] = {
+            "AutoConfig": "modeling_rwkv7.RWKV7Config",
+            "AutoModel": "modeling_rwkv7.RWKV7Model",
+            "AutoModelForCasualLM": "modeling_rwkv7.RWKV7ForCasualLM"
+        }
+        config_json["architectures"] = ["RWKV7ForCasualLM", "RWKV7Model", "RWKV7PreTrainedModel"]
+    else:
+        raise ValueError(f"Unsupported model class: {model_class}")
+
+    # Save the patched config
+    with config_json_path.open("w") as f:
+        json.dump(config_json, f, indent=2)
+    
     # Print the success message
     print("-----------------------------")
     print("Successfully converted RWKV model to HuggingFace format")
@@ -105,7 +166,7 @@ def main():
     parser.add_argument("model_source", help="Path to RWKV model file in .pth or .safetensors format")
     parser.add_argument("output_dir", help="Directory to output the converted HuggingFace model")
     parser.add_argument("--model_class", default="v7_goose", help="Model class (default: v7_goose)")
-    
+    parser.add_argument("--tokenizer_type", default="auto", help="Tokenizer to use, either 'auto','world' or 'neox' (default: auto)")
     args = parser.parse_args()
     hf_builder(args)
 
