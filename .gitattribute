@@ -1,0 +1,2 @@
+# Ignore notebook files from github stats
+**/*.ipynb linguist-vendored
