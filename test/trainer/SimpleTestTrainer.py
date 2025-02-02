@@ -309,7 +309,7 @@ class SimpleTestTrainer:
         for epoch in range(self.num_epochs):
             print(f"Epoch {epoch + 1}/{self.num_epochs}")
             epoch_train_loss = self.train_epoch()
-            epoch_val_loss = self.validate()
+            epoch_val_loss = self.run_validation()
 
             print(f"Training Loss: {epoch_train_loss:.4f}")
             log_dict = {"epoch_train_loss": epoch_train_loss, "epoch": epoch + 1, "epoch_val_loss": epoch_val_loss}
