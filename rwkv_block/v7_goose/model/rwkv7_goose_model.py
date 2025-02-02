@@ -69,7 +69,8 @@ class RWKV7GooseModel(nn.Module):
 
         # Reinit the  ln_out and head
         self.ln_out = nn.LayerNorm(hidden_size, device=device, dtype=dtype)
-        self.head = nn.Linear(hidden_size, vocab_size, bias=False, device=device, dtype=dtype)
+        if self.head is not None:
+            self.head = nn.Linear(hidden_size, vocab_size, bias=False, device=device, dtype=dtype)
 
         # Reinit the init state tuning support
         if configMap.init_state_wkv:
