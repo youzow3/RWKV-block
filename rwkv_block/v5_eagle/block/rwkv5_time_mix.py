@@ -19,11 +19,11 @@ class RWKV5TimeMix(torch.nn.Module):
         self.configMap = configMap
 
         # Get required props
-        n_dim = configMap.n_dim
-        n_layer = configMap.n_layer
+        hidden_size = configMap.hidden_size
+        num_hidden_layers = configMap.num_hidden_layers
 
         # Get optional props
-        n_dim_att = configMap.get_n_dim_att()
+        hidden_size_att = configMap.get_hidden_size_att()
         layer_id = configMap.get_layer_id(0)
         device = configMap.get_device('cpu')
         dtype = configMap.get_dtype('bfloat16')
@@ -43,11 +43,11 @@ class RWKV5TimeMix(torch.nn.Module):
         # V5-R4 changes
         # https://github.com/BlinkDL/RWKV-LM/commit/5aab658f945ba80745d36c2ab411fb43df3a74f9    
         with torch.no_grad():
-            ratio_0_to_1 = layer_id / (n_layer - 1)  # 0 to 1
-            ratio_1_to_almost0 = 1.0 - (layer_id / n_layer)  # 1 to ~0
-            ddd = torch.ones(1, 1, n_dim, device=device, dtype=dtype)
-            for i in range(n_dim):
-                ddd[0, 0, i] = i / n_dim
+            ratio_0_to_1 = layer_id / (num_hidden_layers - 1)  # 0 to 1
+            ratio_1_to_almost0 = 1.0 - (layer_id / num_hidden_layers)  # 1 to ~0
+            ddd = torch.ones(1, 1, hidden_size, device=device, dtype=dtype)
+            for i in range(hidden_size):
+                ddd[0, 0, i] = i / hidden_size
 
             # fancy time_mix
             self.time_mix_k = nn.Parameter(torch.pow(ddd, ratio_1_to_almost0))
@@ -56,27 +56,27 @@ class RWKV5TimeMix(torch.nn.Module):
             self.time_mix_g = nn.Parameter(torch.pow(ddd, 0.5 * ratio_1_to_almost0))
 
             # fancy time_decay
-            decay_speed = torch.ones(n_dim_att, device=device, dtype=dtype)
-            for n in range(n_dim_att):
-                decay_speed[n] = -6 + 5 * (n / (n_dim_att - 1)) ** (0.7 + 1.3 * ratio_0_to_1)
+            decay_speed = torch.ones(hidden_size_att, device=device, dtype=dtype)
+            for n in range(hidden_size_att):
+                decay_speed[n] = -6 + 5 * (n / (hidden_size_att - 1)) ** (0.7 + 1.3 * ratio_0_to_1)
             self.time_decay = nn.Parameter(decay_speed.reshape(n_head, head_size))
             # print(layer_id, self.time_decay.flatten()[:3].cpu().numpy(), '...', self.time_decay.flatten()[-3:].cpu().numpy())
 
-            tmp = torch.zeros(n_dim_att, device=device, dtype=dtype)
-            for n in range(n_dim_att):
+            tmp = torch.zeros(hidden_size_att, device=device, dtype=dtype)
+            for n in range(hidden_size_att):
                 zigzag = ((n + 1) % 3 - 1) * 0.1
-                tmp[n] = ratio_0_to_1 * (1 - (n / (n_dim_att - 1))) + zigzag
+                tmp[n] = ratio_0_to_1 * (1 - (n / (hidden_size_att - 1))) + zigzag
 
             self.time_faaaa = nn.Parameter(tmp.reshape(n_head, head_size))
 
         # self.time_shift = nn.ZeroPad2d((0, 0, 1, -1))
-        self.receptance = nn.Linear(n_dim, n_dim_att, bias=False, device=device, dtype=dtype)
-        self.key = nn.Linear(n_dim, n_dim_att, bias=False, device=device, dtype=dtype)
+        self.receptance = nn.Linear(hidden_size, hidden_size_att, bias=False, device=device, dtype=dtype)
+        self.key = nn.Linear(hidden_size, hidden_size_att, bias=False, device=device, dtype=dtype)
 
-        self.value = nn.Linear(n_dim, n_dim_att, bias=False, device=device, dtype=dtype)
-        self.output = nn.Linear(n_dim_att, n_dim, bias=False, device=device, dtype=dtype)
-        self.gate = nn.Linear(n_dim, n_dim_att, bias=False, device=device, dtype=dtype)
-        self.ln_x = nn.GroupNorm(n_head, n_dim_att, device=device, dtype=dtype)
+        self.value = nn.Linear(hidden_size, hidden_size_att, bias=False, device=device, dtype=dtype)
+        self.output = nn.Linear(hidden_size_att, hidden_size, bias=False, device=device, dtype=dtype)
+        self.gate = nn.Linear(hidden_size, hidden_size_att, bias=False, device=device, dtype=dtype)
+        self.ln_x = nn.GroupNorm(n_head, hidden_size_att, device=device, dtype=dtype)
         
     def forward(self, x:Tensor, shift_state_in:Tensor, wkv_state_in:Tensor) -> tuple[Tensor,Tensor,Tensor]:
         '''

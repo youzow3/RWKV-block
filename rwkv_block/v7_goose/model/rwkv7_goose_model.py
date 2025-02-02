@@ -19,31 +19,31 @@ class RWKV7GooseModel(nn.Module):
         self.configMap = configMap
 
         # Get the required prop
-        n_layer = configMap.n_layer
-        n_vocab = configMap.n_vocab
+        num_hidden_layers = configMap.num_hidden_layers
+        vocab_size = configMap.vocab_size
         device = configMap.get_device('cpu')
         dtype = configMap.get_dtype('bfloat16')
-        n_dim = configMap.n_dim
+        hidden_size = configMap.hidden_size
 
         # Embedding layer
-        self.emb = nn.Embedding(n_vocab, n_dim, device=device, dtype=dtype)
+        self.emb = nn.Embedding(vocab_size, hidden_size, device=device, dtype=dtype)
 
         # main block layers
-        blockList = [None]*n_layer
-        for i in range(n_layer):
+        blockList = [None]*num_hidden_layers
+        for i in range(num_hidden_layers):
             blockList[i] = RWKV7LayerBlock(configMap.new_block_config_map(layer_id=i))
         self.blocks = nn.ModuleList(blockList)
 
         # ln_out and head
-        self.ln_out = nn.LayerNorm(n_dim, device=device, dtype=dtype)
-        self.head = nn.Linear(n_dim, n_vocab, bias=False, device=device, dtype=dtype)
+        self.ln_out = nn.LayerNorm(hidden_size, device=device, dtype=dtype)
+        self.head = nn.Linear(hidden_size, vocab_size, bias=False, device=device, dtype=dtype)
 
         # init state tuning support
         if configMap.init_state_wkv:
-            stateTuneList = [None]*n_layer
-            for i in range(n_layer):
+            stateTuneList = [None]*num_hidden_layers
+            for i in range(num_hidden_layers):
                 stateTuneList[i] = nn.ParameterDict({
-                    "wkv": nn.Parameter(torch.zeros(n_dim // 64, 64, 64, device=device, dtype=dtype)),
+                    "wkv": nn.Parameter(torch.zeros(hidden_size // 64, 64, 64, device=device, dtype=dtype)),
                 })
             self.init_state = nn.ParameterList(stateTuneList)
 
@@ -54,29 +54,29 @@ class RWKV7GooseModel(nn.Module):
 
         # Get the required prop
         configMap = self.configMap
-        n_layer = configMap.n_layer
-        n_vocab = configMap.n_vocab
+        num_hidden_layers = configMap.num_hidden_layers
+        vocab_size = configMap.vocab_size
         device = configMap.get_device('cpu')
         dtype = configMap.get_dtype('bfloat16')
-        n_dim = configMap.n_dim
+        hidden_size = configMap.hidden_size
         
         # Iterate and reset the blocks
-        for i in range(n_layer):
+        for i in range(num_hidden_layers):
             self.blocks[i].init_parameters()
 
         # Reinit the Embedding layer
-        self.emb = nn.Embedding(n_vocab, n_dim, device=device, dtype=dtype)
+        self.emb = nn.Embedding(vocab_size, hidden_size, device=device, dtype=dtype)
 
         # Reinit the  ln_out and head
-        self.ln_out = nn.LayerNorm(n_dim, device=device, dtype=dtype)
-        self.head = nn.Linear(n_dim, n_vocab, bias=False, device=device, dtype=dtype)
+        self.ln_out = nn.LayerNorm(hidden_size, device=device, dtype=dtype)
+        self.head = nn.Linear(hidden_size, vocab_size, bias=False, device=device, dtype=dtype)
 
         # Reinit the init state tuning support
         if configMap.init_state_wkv:
-            stateTuneList = [None]*n_layer
-            for i in range(n_layer):
+            stateTuneList = [None]*num_hidden_layers
+            for i in range(num_hidden_layers):
                 stateTuneList[i] = nn.ParameterDict({
-                    "wkv": nn.Parameter(torch.zeros(n_dim // 64, 64, 64, device=device, dtype=torch.float)),
+                    "wkv": nn.Parameter(torch.zeros(hidden_size // 64, 64, 64, device=device, dtype=torch.float)),
                 })
             self.init_state = nn.ParameterList(stateTuneList)
 
@@ -104,19 +104,19 @@ class RWKV7GooseModel(nn.Module):
         Get an initialized copy of the model state, for the given batch size
         '''
         # Get required configs
-        n_dim = self.configMap.n_dim
+        hidden_size = self.configMap.hidden_size
         init_state_wkv = self.configMap.init_state_wkv
-        n_layer = self.configMap.n_layer
+        num_hidden_layers = self.configMap.num_hidden_layers
 
         # Prepare the initial state
-        init_state = [ None for i in range(n_layer) ]
-        for i in range(n_layer):
+        init_state = [ None for i in range(num_hidden_layers) ]
+        for i in range(num_hidden_layers):
             device = self.blocks[i].ln1.weight.data.device
             dtype = self.blocks[i].ln1.weight.data.dtype
 
             # Use the saved init_state if enabled
             # TODO: Consider letting the wkv_state dtype be a parameter
-            wkv_state = torch.zeros(batch_size, n_dim // 64, 64, 64, device=device, dtype=torch.float)
+            wkv_state = torch.zeros(batch_size, hidden_size // 64, 64, 64, device=device, dtype=torch.float)
             if init_state_wkv and skip_init_state == False:
                 init_wkv = self.init_state[i]["wkv"]
                 for b in range(batch_size):
@@ -124,9 +124,9 @@ class RWKV7GooseModel(nn.Module):
 
             # Prepare the state
             init_state[i] = (
-                torch.zeros(batch_size, n_dim, device=device, dtype=dtype),
+                torch.zeros(batch_size, hidden_size, device=device, dtype=dtype),
                 wkv_state,
-                torch.zeros(batch_size, n_dim, device=device, dtype=dtype)
+                torch.zeros(batch_size, hidden_size, device=device, dtype=dtype)
             )
         return init_state
 
@@ -156,7 +156,7 @@ class RWKV7GooseModel(nn.Module):
 
         # If no return state is set, let _forward_internal, set it up
         if ret_stateList is None:
-            ret_stateList = [ None for i in range(self.configMap.n_layer) ]
+            ret_stateList = [ None for i in range(self.configMap.num_hidden_layers) ]
             return self._forward_internal(idx, prv_stateList, ret_stateList, overwrite_ret_tensor=False)
 
         # Forward internally

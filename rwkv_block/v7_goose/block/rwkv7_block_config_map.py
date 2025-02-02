@@ -8,8 +8,8 @@ class RWKV7BlockConfigMap:
 
     """Configuration map for RWKV based models"""
     # Key properties for the block / model
-    n_layer: int
-    n_dim: int
+    num_hidden_layers: int
+    hidden_size: int
 
     head_size: int = 64
     head_size_divisor: int = 8
@@ -35,8 +35,8 @@ class RWKV7BlockConfigMap:
     dtype: Union[torch.dtype, str, None] = None
 
     # Channel mix / FFN block dimension size
-    n_dim_ffn: Optional[int] = None
-    n_dim_att: Optional[int] = None
+    hidden_size_ffn: Optional[int] = None
+    hidden_size_att: Optional[int] = None
 
     # # number of heads
     # n_head: Optional[int] = None
@@ -81,32 +81,32 @@ class RWKV7BlockConfigMap:
     
     # ---
     
-    def get_n_dim_att(self) -> int:
+    def get_hidden_size_att(self) -> int:
         '''
         Returns the dimension of attention
         '''
-        if self.n_dim_att is not None:
-            n_dim_att = self.n_dim_att
+        if self.hidden_size_att is not None:
+            hidden_size_att = self.hidden_size_att
         else:
-            n_dim = self.n_dim
-            assert n_dim  % 32 == 0, f"n_dim must be divisible by 32"
-            n_dim_att = n_dim
-        assert n_dim_att % 32 == 0, f"n_dim_att must be divisible by 32 ({n_dim_att})"
-        return n_dim_att
+            hidden_size = self.hidden_size
+            assert hidden_size  % 32 == 0, f"hidden_size must be divisible by 32"
+            hidden_size_att = hidden_size
+        assert hidden_size_att % 32 == 0, f"hidden_size_att must be divisible by 32 ({hidden_size_att})"
+        return hidden_size_att
     
-    def get_n_dim_ffn(self) -> int:
+    def get_hidden_size_ffn(self) -> int:
         '''
         Returns the dimension of feed forward network
         '''
-        if self.n_dim_ffn is not None:
-            n_dim_ffn = self.n_dim_ffn
+        if self.hidden_size_ffn is not None:
+            hidden_size_ffn = self.hidden_size_ffn
         else:
-            n_dim = self.n_dim
-            assert n_dim  % 32 == 0, f"n_dim must be divisible by 32"
-            n_dim_ffn = n_dim  * 4
+            hidden_size = self.hidden_size
+            assert hidden_size  % 32 == 0, f"hidden_size must be divisible by 32"
+            hidden_size_ffn = hidden_size  * 4
 
-        assert n_dim_ffn % 32 == 0, f"n_dim_ffn must be divisible by 32"
-        return n_dim_ffn
+        assert hidden_size_ffn % 32 == 0, f"hidden_size_ffn must be divisible by 32"
+        return hidden_size_ffn
     
     # def get_n_head(self) -> int:
     #     '''
@@ -115,9 +115,9 @@ class RWKV7BlockConfigMap:
     #     if self.n_head is not None:
     #         n_head = self.n_head
     #     else:
-    #         n_dim_att = self.get_n_dim_att()
-    #         n_head = self.get_n_dim_att() // self.head_size
-    #         assert n_dim_att % n_head == 0 ,  f"n_dim_att must be divisible by head_size ({self.head_size})"
+    #         hidden_size_att = self.get_hidden_size_att()
+    #         n_head = self.get_hidden_size_att() // self.head_size
+    #         assert hidden_size_att % n_head == 0 ,  f"hidden_size_att must be divisible by head_size ({self.head_size})"
     #
     #     return n_head
 

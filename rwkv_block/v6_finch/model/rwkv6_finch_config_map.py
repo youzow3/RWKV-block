@@ -8,7 +8,7 @@ from ..block.rwkv6_block_config_map import RWKV6BlockConfigMap
 @dataclass
 class RWKV6FinchConfigMap(RWKV6BlockConfigMap):
     # This is the world tokenizer size
-    n_vocab: int = 65536 
+    vocab_size: int = 65536 
     init_state_wkv: bool = False
 
     @staticmethod
@@ -34,11 +34,11 @@ class RWKV6FinchConfigMap(RWKV6BlockConfigMap):
         '''
 
         # Iterate and count the layers
-        n_layer = 0
+        num_hidden_layers = 0
         for key in state_dict.keys():
             if key.startswith('blocks.'):
                 idx = key.split('.')[1]
-                n_layer = max(n_layer, int(idx)+1)
+                num_hidden_layers = max(num_hidden_layers, int(idx)+1)
 
         # Enable wkv_state
         if 'init_state.0.wkv' in state_dict:
@@ -46,16 +46,16 @@ class RWKV6FinchConfigMap(RWKV6BlockConfigMap):
         
         # Initialize the config map, with the configured values
         return RWKV6FinchConfigMap(
-            n_layer=n_layer,
-            n_dim=state_dict['emb.weight'].shape[1],
-            n_vocab=state_dict['emb.weight'].shape[0],
+            num_hidden_layers=num_hidden_layers,
+            hidden_size=state_dict['emb.weight'].shape[1],
+            vocab_size=state_dict['emb.weight'].shape[0],
             # init_state_wkv=hasattr(state_dict, 'init_state.0.wkv'),
 
             n_head=state_dict['blocks.0.att.time_faaaa'].shape[0],
             head_size=state_dict['blocks.0.att.time_faaaa'].shape[1],
 
-            n_dim_att=state_dict['blocks.0.att.key.weight'].shape[0],
-            n_dim_ffn=state_dict['blocks.0.ffn.key.weight'].shape[0],
+            hidden_size_att=state_dict['blocks.0.att.key.weight'].shape[0],
+            hidden_size_ffn=state_dict['blocks.0.ffn.key.weight'].shape[0],
 
             **kwargs
         )

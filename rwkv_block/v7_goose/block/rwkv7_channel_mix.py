@@ -23,18 +23,18 @@ class RWKV7ChannelMix(torch.nn.Module):
         self.configMap = configMap
 
         # Get various props
-        n_dim = configMap.n_dim
+        hidden_size = configMap.hidden_size
         device = configMap.get_device('cpu')
         dtype = configMap.get_dtype('bfloat16')
 
-        # By default, n_dim_ffn = n_dim * 4
-        n_dim_ffn = configMap.get_n_dim_ffn() 
+        # By default, hidden_size_ffn = hidden_size * 4
+        hidden_size_ffn = configMap.get_hidden_size_ffn() 
         
         # Build the various params
         # ---
-        self.x_k = nn.Parameter(torch.empty(1, 1, n_dim, device=device, dtype=dtype))
-        self.key = nn.Linear(n_dim, n_dim_ffn, bias=False, device=device, dtype=dtype)
-        self.value = nn.Linear(n_dim_ffn, n_dim, bias=False, device=device, dtype=dtype)
+        self.x_k = nn.Parameter(torch.empty(1, 1, hidden_size, device=device, dtype=dtype))
+        self.key = nn.Linear(hidden_size, hidden_size_ffn, bias=False, device=device, dtype=dtype)
+        self.value = nn.Linear(hidden_size_ffn, hidden_size, bias=False, device=device, dtype=dtype)
 
     def init_parameters(self):
         '''
@@ -43,28 +43,28 @@ class RWKV7ChannelMix(torch.nn.Module):
         
         # Get required props
         configMap = self.configMap
-        n_dim = configMap.n_dim
-        n_layer = configMap.n_layer
+        hidden_size = configMap.hidden_size
+        num_hidden_layers = configMap.num_hidden_layers
 
         # Get optional props
         layer_id = configMap.get_layer_id(0)
         device = configMap.get_device('cpu')
         dtype = configMap.get_dtype('bfloat16')
 
-        # By default, n_dim_ffn = n_dim * 4
-        n_dim_ffn = configMap.get_n_dim_ffn() 
+        # By default, hidden_size_ffn = hidden_size * 4
+        hidden_size_ffn = configMap.get_hidden_size_ffn() 
         
         # Reset the various params
         # ---
         with torch.no_grad():  # fancy init of time_mix
-            ratio_1_to_almost0 = 1.0 - (layer_id / n_layer)  # 1 to ~0
-            ddd = torch.ones(1, 1, n_dim)
-            for i in range(n_dim):
-                ddd[0, 0, i] = i / n_dim
+            ratio_1_to_almost0 = 1.0 - (layer_id / num_hidden_layers)  # 1 to ~0
+            ddd = torch.ones(1, 1, hidden_size)
+            for i in range(hidden_size):
+                ddd[0, 0, i] = i / hidden_size
             self.x_k = nn.Parameter( (1.0 - torch.pow(ddd, ratio_1_to_almost0**4)).to(device, dtype=dtype) )
 
-        self.key = nn.Linear(n_dim, n_dim_ffn, bias=False, device=device, dtype=dtype)
-        self.value = nn.Linear(n_dim_ffn, n_dim, bias=False, device=device, dtype=dtype)
+        self.key = nn.Linear(hidden_size, hidden_size_ffn, bias=False, device=device, dtype=dtype)
+        self.value = nn.Linear(hidden_size_ffn, hidden_size, bias=False, device=device, dtype=dtype)
 
     def forward(self, x: torch.Tensor, last_state: torch.Tensor) -> tuple[torch.Tensor,torch.Tensor]:
         '''

@@ -22,7 +22,7 @@ class GoldFinchLayerBlock(nn.Module):
         self.configMap = configMap
 
         # Get required props
-        n_dim = configMap.n_dim
+        hidden_size = configMap.hidden_size
         layer_id = configMap.get_layer_id(-1)
         device = configMap.get_device('cpu')
         dtype = configMap.get_dtype('bfloat16')
@@ -35,10 +35,10 @@ class GoldFinchLayerBlock(nn.Module):
         assert layer_id >= 0, f'layer_id must be >= 0, got {layer_id}'
 
         # Setup the layernorms, and mixes
-        self.ln1 = nn.LayerNorm(n_dim, device=device, dtype=dtype)
-        self.ln2 = nn.LayerNorm(n_dim, device=device, dtype=dtype)
+        self.ln1 = nn.LayerNorm(hidden_size, device=device, dtype=dtype)
+        self.ln2 = nn.LayerNorm(hidden_size, device=device, dtype=dtype)
         if layer_id == 0:
-            self.ln0 = nn.LayerNorm(n_dim, device=device, dtype=dtype)
+            self.ln0 = nn.LayerNorm(hidden_size, device=device, dtype=dtype)
         else:
             self.ln0 = nn.Identity(device=device)
 

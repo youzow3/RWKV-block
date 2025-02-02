@@ -34,8 +34,8 @@ class RWKV7TimeMix(torch.nn.Module):
         self.configMap = configMap
 
         # Get required props
-        n_dim = configMap.n_dim
-        n_layer = configMap.n_layer
+        hidden_size = configMap.hidden_size
+        num_hidden_layers = configMap.num_hidden_layers
 
         # Get the layer id
         layer_id = configMap.get_layer_id(0)
@@ -45,11 +45,11 @@ class RWKV7TimeMix(torch.nn.Module):
         device = configMap.get_device('cpu')
         dtype = configMap.get_dtype('bfloat16')
 
-        # By default, n_dim_ffn = n_dim
-        n_dim_att = configMap.get_n_dim_att()
+        # By default, hidden_size_ffn = hidden_size
+        hidden_size_att = configMap.get_hidden_size_att()
 
-        # Assert n_dim == n_dim_att, until we support different n_dim and n_dim_att
-        assert n_dim == n_dim_att, "n_dim should be equal to n_dim_att (@TODO: support different n_dim and n_dim_att)"
+        # Assert hidden_size == hidden_size_att, until we support different hidden_size and hidden_size_att
+        assert hidden_size == hidden_size_att, "hidden_size should be equal to hidden_size_att (@TODO: support different hidden_size and hidden_size_att)"
 
         # Head size settings
         head_size = configMap.head_size
@@ -57,8 +57,8 @@ class RWKV7TimeMix(torch.nn.Module):
         head_size_divisor = configMap.head_size_divisor
 
         # Number of heads
-        n_head = n_dim_att // head_size
-        assert n_dim_att % head_size == 0, "n_dim_att should be divisible by head_size"
+        n_head = hidden_size_att // head_size
+        assert hidden_size_att % head_size == 0, "hidden_size_att should be divisible by head_size"
         self.n_head = n_head
 
         # Backend
@@ -70,44 +70,44 @@ class RWKV7TimeMix(torch.nn.Module):
         with torch.no_grad():
             # Note: for some data, you can reduce D_GATE_LORA or even remove this gate
             def calc_lora_rank(exponent, multiplier):
-                return max(1, round(n_dim ** exponent * multiplier / 32)) * 32
+                return max(1, round(hidden_size ** exponent * multiplier / 32)) * 32
             D_DECAY_LORA = calc_lora_rank(0.5, 1.8)
             D_AAA_LORA   = calc_lora_rank(0.5, 1.8)
             D_MV_LORA    = calc_lora_rank(0.5, 1.3)
             D_GATE_LORA  = calc_lora_rank(0.8, 0.6)
 
-            self.x_r = nn.Parameter(torch.empty(1,1,n_dim, device=device, dtype=dtype))
-            self.x_w = nn.Parameter(torch.empty(1,1,n_dim, device=device, dtype=dtype))
-            self.x_k = nn.Parameter(torch.empty(1,1,n_dim, device=device, dtype=dtype))
-            self.x_v = nn.Parameter(torch.empty(1,1,n_dim, device=device, dtype=dtype))
-            self.x_a = nn.Parameter(torch.empty(1,1,n_dim, device=device, dtype=dtype))
-            self.x_g = nn.Parameter(torch.empty(1,1,n_dim, device=device, dtype=dtype))
+            self.x_r = nn.Parameter(torch.empty(1,1,hidden_size, device=device, dtype=dtype))
+            self.x_w = nn.Parameter(torch.empty(1,1,hidden_size, device=device, dtype=dtype))
+            self.x_k = nn.Parameter(torch.empty(1,1,hidden_size, device=device, dtype=dtype))
+            self.x_v = nn.Parameter(torch.empty(1,1,hidden_size, device=device, dtype=dtype))
+            self.x_a = nn.Parameter(torch.empty(1,1,hidden_size, device=device, dtype=dtype))
+            self.x_g = nn.Parameter(torch.empty(1,1,hidden_size, device=device, dtype=dtype))
 
-            self.w0 = nn.Parameter(torch.empty(1,1,n_dim, device=device, dtype=dtype))
-            self.w1 = nn.Parameter(torch.empty(n_dim, D_DECAY_LORA, device=device, dtype=dtype))
-            self.w2 = nn.Parameter(torch.empty(D_DECAY_LORA, n_dim, device=device, dtype=dtype))
+            self.w0 = nn.Parameter(torch.empty(1,1,hidden_size, device=device, dtype=dtype))
+            self.w1 = nn.Parameter(torch.empty(hidden_size, D_DECAY_LORA, device=device, dtype=dtype))
+            self.w2 = nn.Parameter(torch.empty(D_DECAY_LORA, hidden_size, device=device, dtype=dtype))
 
-            self.a0 = nn.Parameter(torch.empty(1,1,n_dim, device=device, dtype=dtype))
-            self.a1 = nn.Parameter(torch.empty(n_dim,D_AAA_LORA, device=device, dtype=dtype))
-            self.a2 = nn.Parameter(torch.empty(D_AAA_LORA,n_dim, device=device, dtype=dtype))
+            self.a0 = nn.Parameter(torch.empty(1,1,hidden_size, device=device, dtype=dtype))
+            self.a1 = nn.Parameter(torch.empty(hidden_size,D_AAA_LORA, device=device, dtype=dtype))
+            self.a2 = nn.Parameter(torch.empty(D_AAA_LORA,hidden_size, device=device, dtype=dtype))
             
             if layer_id > 0:
-                self.v0 = nn.Parameter(torch.empty(1,1,n_dim, device=device, dtype=dtype))
-                self.v1 = nn.Parameter(torch.empty(n_dim,D_MV_LORA, device=device, dtype=dtype))
-                self.v2 = nn.Parameter(torch.empty(D_MV_LORA,n_dim, device=device, dtype=dtype))
+                self.v0 = nn.Parameter(torch.empty(1,1,hidden_size, device=device, dtype=dtype))
+                self.v1 = nn.Parameter(torch.empty(hidden_size,D_MV_LORA, device=device, dtype=dtype))
+                self.v2 = nn.Parameter(torch.empty(D_MV_LORA,hidden_size, device=device, dtype=dtype))
                 
-            self.g1 = nn.Parameter(torch.empty(n_dim, D_GATE_LORA, device=device, dtype=dtype))
-            self.g2 = nn.Parameter(torch.empty(D_GATE_LORA, n_dim, device=device, dtype=dtype))
+            self.g1 = nn.Parameter(torch.empty(hidden_size, D_GATE_LORA, device=device, dtype=dtype))
+            self.g2 = nn.Parameter(torch.empty(D_GATE_LORA, hidden_size, device=device, dtype=dtype))
 
-            self.k_k = nn.Parameter(torch.empty(1,1,n_dim, device=device, dtype=dtype))
-            self.k_a = nn.Parameter(torch.empty(1,1,n_dim, device=device, dtype=dtype))
+            self.k_k = nn.Parameter(torch.empty(1,1,hidden_size, device=device, dtype=dtype))
+            self.k_a = nn.Parameter(torch.empty(1,1,hidden_size, device=device, dtype=dtype))
             self.r_k = nn.Parameter(torch.empty(n_head, head_size, device=device, dtype=dtype))
 
-        self.receptance = nn.Linear(n_dim, n_dim_att, bias=False, device=device, dtype=dtype)
-        self.key = nn.Linear(n_dim, n_dim_att, bias=False, device=device, dtype=dtype)
-        self.value = nn.Linear(n_dim, n_dim_att, bias=False, device=device, dtype=dtype)
-        self.output = nn.Linear(n_dim_att, n_dim, bias=False, device=device, dtype=dtype)
-        self.ln_x = nn.GroupNorm(n_head, n_dim_att, device=device, dtype=dtype, eps=(1e-5)*head_size)
+        self.receptance = nn.Linear(hidden_size, hidden_size_att, bias=False, device=device, dtype=dtype)
+        self.key = nn.Linear(hidden_size, hidden_size_att, bias=False, device=device, dtype=dtype)
+        self.value = nn.Linear(hidden_size, hidden_size_att, bias=False, device=device, dtype=dtype)
+        self.output = nn.Linear(hidden_size_att, hidden_size, bias=False, device=device, dtype=dtype)
+        self.ln_x = nn.GroupNorm(n_head, hidden_size_att, device=device, dtype=dtype, eps=(1e-5)*head_size)
         
     def init_parameters(self):
         '''
@@ -116,8 +116,8 @@ class RWKV7TimeMix(torch.nn.Module):
         configMap = self.configMap
 
         # Get required props
-        n_dim = configMap.n_dim
-        n_layer = configMap.n_layer
+        hidden_size = configMap.hidden_size
+        num_hidden_layers = configMap.num_hidden_layers
 
         # Get the layer id
         layer_id = self.layer_id
@@ -126,32 +126,32 @@ class RWKV7TimeMix(torch.nn.Module):
         device = configMap.get_device('cpu')
         dtype = configMap.get_dtype('bfloat16')
 
-        # By default, n_dim_ffn = n_dim
-        n_dim_att = configMap.get_n_dim_att()
+        # By default, hidden_size_ffn = hidden_size
+        hidden_size_att = configMap.get_hidden_size_att()
 
-        # Assert n_dim == n_dim_att, until we support different n_dim and n_dim_att
-        assert n_dim == n_dim_att, "n_dim should be equal to n_dim_att (@TODO: support different n_dim and n_dim_att)"
+        # Assert hidden_size == hidden_size_att, until we support different hidden_size and hidden_size_att
+        assert hidden_size == hidden_size_att, "hidden_size should be equal to hidden_size_att (@TODO: support different hidden_size and hidden_size_att)"
 
         # Head size settings
         head_size = self.head_size
         head_size_divisor = configMap.head_size_divisor
 
         # Number of heads
-        n_head = n_dim_att // head_size
-        assert n_dim_att % head_size == 0, "n_dim_att should be divisible by head_size"
+        n_head = hidden_size_att // head_size
+        assert hidden_size_att % head_size == 0, "hidden_size_att should be divisible by head_size"
         
         # Reset the various params
         # ---
         with torch.no_grad():
-            ratio_0_to_1 = layer_id / (n_layer - 1)  # 0 to 1
-            ratio_1_to_almost0 = 1.0 - (layer_id / n_layer)  # 1 to ~0
-            ddd = torch.ones(1, 1, n_dim, device=device, dtype=dtype)
-            for i in range(n_dim):
-                ddd[0, 0, i] = i / n_dim
+            ratio_0_to_1 = layer_id / (num_hidden_layers - 1)  # 0 to 1
+            ratio_1_to_almost0 = 1.0 - (layer_id / num_hidden_layers)  # 1 to ~0
+            ddd = torch.ones(1, 1, hidden_size, device=device, dtype=dtype)
+            for i in range(hidden_size):
+                ddd[0, 0, i] = i / hidden_size
 
             # Note: for some data, you can reduce D_GATE_LORA or even remove this gate
             def calc_lora_rank(exponent, multiplier):
-                return max(1, round(n_dim ** exponent * multiplier / 32)) * 32
+                return max(1, round(hidden_size ** exponent * multiplier / 32)) * 32
             D_DECAY_LORA = calc_lora_rank(0.5, 1.8)
             D_AAA_LORA   = calc_lora_rank(0.5, 1.8)
             D_MV_LORA    = calc_lora_rank(0.5, 1.3)
@@ -178,40 +178,40 @@ class RWKV7TimeMix(torch.nn.Module):
                     assert False
                 return x.to(device, dtype=dtype)
 
-            # D_DECAY_LORA = max(32, int(round(  (1.8*(n_dim**0.5))  /32)*32))
-            decay_speed = torch.ones(n_dim, device=device, dtype=dtype)
-            for n in range(n_dim):
-                decay_speed[n] = -7 + 5 * (n / (n_dim - 1)) ** (0.85 + 1.0 * ratio_0_to_1 ** 0.5)
+            # D_DECAY_LORA = max(32, int(round(  (1.8*(hidden_size**0.5))  /32)*32))
+            decay_speed = torch.ones(hidden_size, device=device, dtype=dtype)
+            for n in range(hidden_size):
+                decay_speed[n] = -7 + 5 * (n / (hidden_size - 1)) ** (0.85 + 1.0 * ratio_0_to_1 ** 0.5)
             
-            self.w0.copy_(decay_speed.reshape(1,1,n_dim).to(device, dtype=dtype) + 0.5)  # !!! 0.5 comes from F.softplus !!!
-            self.w1.copy_(torch.zeros(n_dim, D_DECAY_LORA, device=device, dtype=dtype))
-            self.w2.copy_(ortho_init(torch.zeros(D_DECAY_LORA, n_dim), 0.1))
+            self.w0.copy_(decay_speed.reshape(1,1,hidden_size).to(device, dtype=dtype) + 0.5)  # !!! 0.5 comes from F.softplus !!!
+            self.w1.copy_(torch.zeros(hidden_size, D_DECAY_LORA, device=device, dtype=dtype))
+            self.w2.copy_(ortho_init(torch.zeros(D_DECAY_LORA, hidden_size), 0.1))
 
-            # D_AAA_LORA = max(32, int(round(  (1.8*(n_dim**0.5))  /32)*32)) # suggestion
-            self.a0.copy_(torch.zeros(1,1,n_dim, device=device, dtype=dtype))
-            self.a1.copy_(torch.zeros(n_dim, D_AAA_LORA, device=device, dtype=dtype))
-            self.a2.copy_(ortho_init(torch.zeros(D_AAA_LORA, n_dim), 0.1))
+            # D_AAA_LORA = max(32, int(round(  (1.8*(hidden_size**0.5))  /32)*32)) # suggestion
+            self.a0.copy_(torch.zeros(1,1,hidden_size, device=device, dtype=dtype))
+            self.a1.copy_(torch.zeros(hidden_size, D_AAA_LORA, device=device, dtype=dtype))
+            self.a2.copy_(ortho_init(torch.zeros(D_AAA_LORA, hidden_size), 0.1))
 
-            # D_MV_LORA = max(32, int(round(  (1.3*(n_dim**0.5))  /32)*32)) # suggestion
+            # D_MV_LORA = max(32, int(round(  (1.3*(hidden_size**0.5))  /32)*32)) # suggestion
             if layer_id > 0:
-                self.v0.copy_(torch.zeros(1,1,n_dim, device=device, dtype=dtype)+1.0)
-                self.v1.copy_(torch.zeros(n_dim, D_MV_LORA, device=device, dtype=dtype))
-                self.v2.copy_(ortho_init(torch.zeros(D_MV_LORA, n_dim), 0.1))
+                self.v0.copy_(torch.zeros(1,1,hidden_size, device=device, dtype=dtype)+1.0)
+                self.v1.copy_(torch.zeros(hidden_size, D_MV_LORA, device=device, dtype=dtype))
+                self.v2.copy_(ortho_init(torch.zeros(D_MV_LORA, hidden_size), 0.1))
 
-            # D_GATE_LORA = max(32, int(round(  (0.6*(n_dim**0.8))  /32)*32)) # suggestion
+            # D_GATE_LORA = max(32, int(round(  (0.6*(hidden_size**0.8))  /32)*32)) # suggestion
             # Note: for some data, you can reduce D_GATE_LORA or even remove this gate
-            self.g1.copy_(torch.zeros(n_dim, D_GATE_LORA, device=device, dtype=dtype))
-            self.g2.copy_(ortho_init(torch.zeros(D_GATE_LORA, n_dim), 0.1))
+            self.g1.copy_(torch.zeros(hidden_size, D_GATE_LORA, device=device, dtype=dtype))
+            self.g2.copy_(ortho_init(torch.zeros(D_GATE_LORA, hidden_size), 0.1))
 
-            self.k_k.copy_(torch.ones(1,1,n_dim, device=device, dtype=dtype)*0.85)
-            self.k_a.copy_(torch.ones(1,1,n_dim, device=device, dtype=dtype))
+            self.k_k.copy_(torch.ones(1,1,hidden_size, device=device, dtype=dtype)*0.85)
+            self.k_a.copy_(torch.ones(1,1,hidden_size, device=device, dtype=dtype))
             self.r_k.copy_(torch.zeros(n_head,head_size, device=device, dtype=dtype))
             
-        self.receptance = nn.Linear(n_dim, n_dim_att, bias=False, device=device, dtype=dtype)
-        self.key = nn.Linear(n_dim, n_dim_att, bias=False, device=device, dtype=dtype)
-        self.value = nn.Linear(n_dim, n_dim_att, bias=False, device=device, dtype=dtype)
-        self.output = nn.Linear(n_dim_att, n_dim, bias=False, device=device, dtype=dtype)
-        self.ln_x = nn.GroupNorm(n_head, n_dim_att, device=device, dtype=dtype, eps=(1e-5)*head_size)
+        self.receptance = nn.Linear(hidden_size, hidden_size_att, bias=False, device=device, dtype=dtype)
+        self.key = nn.Linear(hidden_size, hidden_size_att, bias=False, device=device, dtype=dtype)
+        self.value = nn.Linear(hidden_size, hidden_size_att, bias=False, device=device, dtype=dtype)
+        self.output = nn.Linear(hidden_size_att, hidden_size, bias=False, device=device, dtype=dtype)
+        self.ln_x = nn.GroupNorm(n_head, hidden_size_att, device=device, dtype=dtype, eps=(1e-5)*head_size)
 
     def forward(self, x:Tensor, shift_state_in:Tensor, wkv_state_in:Tensor, v_first_val:Tensor) -> tuple[Tensor,Tensor,Tensor,Tensor]:
         '''

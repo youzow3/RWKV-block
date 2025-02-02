@@ -21,11 +21,11 @@ class RWKV6TimeMixB2(nn.Module):
         self.configMap = configMap
 
         # Get required props
-        n_dim = configMap.n_dim
-        n_layer = configMap.n_layer
+        hidden_size = configMap.hidden_size
+        num_hidden_layers = configMap.num_hidden_layers
 
         # Get optional props
-        n_dim_att = configMap.get_n_dim_att()
+        hidden_size_att = configMap.get_hidden_size_att()
         layer_id = configMap.get_layer_id(0)
         device = configMap.get_device('cpu')
         dtype = configMap.get_dtype('bfloat16')
@@ -51,11 +51,11 @@ class RWKV6TimeMixB2(nn.Module):
         # Ref:
         # https://github.com/SmerkyG/LinearAttentionArena/blob/f700ff6ae1c834cd0d4110e90d24ae90d69056c0/src/tmix_x060.py
         with torch.no_grad():
-            ratio_0_to_1 = layer_id / (n_layer - 1)  # 0 to 1
-            ratio_1_to_almost0 = 1.0 - (layer_id / n_layer)  # 1 to ~0
-            ddd = torch.ones(1, 1, n_dim, device=device, dtype=dtype)
-            for i in range(n_dim):
-                ddd[0, 0, i] = i / n_dim
+            ratio_0_to_1 = layer_id / (num_hidden_layers - 1)  # 0 to 1
+            ratio_1_to_almost0 = 1.0 - (layer_id / num_hidden_layers)  # 1 to ~0
+            ddd = torch.ones(1, 1, hidden_size, device=device, dtype=dtype)
+            for i in range(hidden_size):
+                ddd[0, 0, i] = i / hidden_size
 
             # fancy time_mix
             self.time_maa_x = nn.Parameter(1.0 - torch.pow(ddd, ratio_1_to_almost0)).to(device, dtype=dtype)
@@ -66,26 +66,26 @@ class RWKV6TimeMixB2(nn.Module):
             self.time_maa_v2 = nn.Parameter(1.0 - (torch.pow(ddd, ratio_1_to_almost0) + 0.3 * ratio_0_to_1)).to(device, dtype=dtype)
 
             D_MIX_DIM = 32 # generate TIME_MIX for w,k,v,r,g
-            self.time_maa_w2 = nn.Parameter(torch.zeros(5, D_MIX_DIM, n_dim).uniform_(-0.01, 0.01)).to(device, dtype=dtype)
-            self.time_maa_w1 = nn.Parameter(torch.zeros(n_dim, D_MIX_DIM*self.time_maa_w2.size(0))).to(device, dtype=dtype)
+            self.time_maa_w2 = nn.Parameter(torch.zeros(5, D_MIX_DIM, hidden_size).uniform_(-0.01, 0.01)).to(device, dtype=dtype)
+            self.time_maa_w1 = nn.Parameter(torch.zeros(hidden_size, D_MIX_DIM*self.time_maa_w2.size(0))).to(device, dtype=dtype)
 
             # fancy time_decay
-            decay_speed = torch.ones(n_dim_att)
-            for n in range(n_dim_att):
-                decay_speed[n] = -6 + 5 * (n / (n_dim_att - 1)) ** (0.7 + 1.3 * ratio_0_to_1)
-            self.time_decay = nn.Parameter(decay_speed.reshape(1,1,n_dim_att)).to(device, dtype=dtype).to(device, dtype=dtype)
+            decay_speed = torch.ones(hidden_size_att)
+            for n in range(hidden_size_att):
+                decay_speed[n] = -6 + 5 * (n / (hidden_size_att - 1)) ** (0.7 + 1.3 * ratio_0_to_1)
+            self.time_decay = nn.Parameter(decay_speed.reshape(1,1,hidden_size_att)).to(device, dtype=dtype).to(device, dtype=dtype)
 
             D_DECAY_DIM = 64
-            self.time_decay_w1 = nn.Parameter(torch.zeros(n_dim, D_DECAY_DIM)).to(device, dtype=dtype)
-            self.time_decay_w2 = nn.Parameter(torch.zeros(D_DECAY_DIM, n_dim_att).uniform_(-0.01, 0.01)).to(device, dtype=dtype)
+            self.time_decay_w1 = nn.Parameter(torch.zeros(hidden_size, D_DECAY_DIM)).to(device, dtype=dtype)
+            self.time_decay_w2 = nn.Parameter(torch.zeros(D_DECAY_DIM, hidden_size_att).uniform_(-0.01, 0.01)).to(device, dtype=dtype)
 
-            self.time_value2_w1 = nn.Parameter(torch.zeros(n_dim, D_DECAY_DIM)).to(device, dtype=dtype)
-            self.time_value2_w2 = nn.Parameter(torch.zeros(D_DECAY_DIM, n_dim_att).uniform_(-0.01, 0.01)).to(device, dtype=dtype)
+            self.time_value2_w1 = nn.Parameter(torch.zeros(hidden_size, D_DECAY_DIM)).to(device, dtype=dtype)
+            self.time_value2_w2 = nn.Parameter(torch.zeros(D_DECAY_DIM, hidden_size_att).uniform_(-0.01, 0.01)).to(device, dtype=dtype)
 
-            tmp = torch.zeros(n_dim_att)
-            for n in range(n_dim_att):
+            tmp = torch.zeros(hidden_size_att)
+            for n in range(hidden_size_att):
                 zigzag = ((n + 1) % 3 - 1) * 0.1
-                tmp[n] = ratio_0_to_1 * (1 - (n / (n_dim_att - 1))) + zigzag
+                tmp[n] = ratio_0_to_1 * (1 - (n / (hidden_size_att - 1))) + zigzag
 
             ori_time_faaaa = nn.Parameter(tmp.reshape(self.n_head, self.head_size)).to(device, dtype=dtype)
             # if self.use_gf_v2:
@@ -94,12 +94,12 @@ class RWKV6TimeMixB2(nn.Module):
             # else:
             #   self.time_faaaa = ori_time_faaaa
 
-        self.receptance = nn.Linear(n_dim, n_dim_att, bias=False, device=device, dtype=dtype)
-        self.key = nn.Linear(n_dim, n_dim_att, bias=False, device=device, dtype=dtype)
+        self.receptance = nn.Linear(hidden_size, hidden_size_att, bias=False, device=device, dtype=dtype)
+        self.key = nn.Linear(hidden_size, hidden_size_att, bias=False, device=device, dtype=dtype)
 
-        self.value = nn.Linear(n_dim, n_dim_att, bias=False, device=device, dtype=dtype)
-        self.output = nn.Linear(n_dim_att, n_dim, bias=False, device=device, dtype=dtype)
-        self.ln_x = nn.LayerNorm(n_dim_att, device=device, dtype=dtype)
+        self.value = nn.Linear(hidden_size, hidden_size_att, bias=False, device=device, dtype=dtype)
+        self.output = nn.Linear(hidden_size_att, hidden_size, bias=False, device=device, dtype=dtype)
+        self.ln_x = nn.LayerNorm(hidden_size_att, device=device, dtype=dtype)
         
     def forward(self, x:Tensor, shift_state_in:Tensor, wkv_state_in:Tensor) -> tuple[Tensor,Tensor,Tensor]:
         '''

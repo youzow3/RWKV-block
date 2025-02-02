@@ -17,11 +17,11 @@ class RWKV5ChannelMix(torch.nn.Module):
         self.configMap = configMap
 
         # Get required props
-        n_dim = configMap.n_dim
-        n_layer = configMap.n_layer
+        hidden_size = configMap.hidden_size
+        num_hidden_layers = configMap.num_hidden_layers
 
         # Get optional props
-        n_dim_ffn = configMap.get_n_dim_ffn()
+        hidden_size_ffn = configMap.get_hidden_size_ffn()
         layer_id = configMap.get_layer_id(0)
         device = configMap.get_device('cpu')
         dtype = configMap.get_dtype('bfloat16')
@@ -29,16 +29,16 @@ class RWKV5ChannelMix(torch.nn.Module):
         # Build the various params
         # ---
         with torch.no_grad():  # fancy init of time_mix
-            ratio_1_to_almost0 = 1.0 - (layer_id / n_layer)  # 1 to ~0
-            ddd = torch.ones(1, 1, n_dim, device=device, dtype=dtype)
-            for i in range(n_dim):
-                ddd[0, 0, i] = i / n_dim
+            ratio_1_to_almost0 = 1.0 - (layer_id / num_hidden_layers)  # 1 to ~0
+            ddd = torch.ones(1, 1, hidden_size, device=device, dtype=dtype)
+            for i in range(hidden_size):
+                ddd[0, 0, i] = i / hidden_size
             self.time_mix_k = nn.Parameter(torch.pow(ddd, ratio_1_to_almost0))
             self.time_mix_r = nn.Parameter(torch.pow(ddd, ratio_1_to_almost0))
 
-        self.key = nn.Linear(n_dim, n_dim_ffn, bias=False, device=device, dtype=dtype)
-        self.receptance = nn.Linear(n_dim, n_dim, bias=False, device=device, dtype=dtype)
-        self.value = nn.Linear(n_dim_ffn, n_dim, bias=False, device=device, dtype=dtype)
+        self.key = nn.Linear(hidden_size, hidden_size_ffn, bias=False, device=device, dtype=dtype)
+        self.receptance = nn.Linear(hidden_size, hidden_size, bias=False, device=device, dtype=dtype)
+        self.value = nn.Linear(hidden_size_ffn, hidden_size, bias=False, device=device, dtype=dtype)
 
     def forward(self, x: Tensor, last_state: Tensor) -> tuple[Tensor,Tensor]:
         '''

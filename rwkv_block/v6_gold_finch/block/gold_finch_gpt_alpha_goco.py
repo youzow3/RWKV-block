@@ -19,11 +19,11 @@ class GoldFinchGPTAlphaGoCo(nn.Module):
         self.configMap = configMap
 
         # Get required props
-        n_dim = configMap.n_dim
-        n_layer = configMap.n_layer
+        hidden_size = configMap.hidden_size
+        num_hidden_layers = configMap.num_hidden_layers
 
         # Get optional props
-        n_dim_att = configMap.get_n_dim_att()
+        hidden_size_att = configMap.get_hidden_size_att()
         layer_id = configMap.get_layer_id(0)
         device = configMap.get_device('cpu')
         dtype = configMap.get_dtype('bfloat16')
@@ -37,11 +37,11 @@ class GoldFinchGPTAlphaGoCo(nn.Module):
         self.head_size_divisor = head_size_divisor
 
         with torch.no_grad():
-            ratio_0_to_1 = layer_id / (n_layer - 1)  # 0 to 1
-            ratio_1_to_almost0 = 1.0 - (layer_id / n_layer)  # 1 to ~0
-            ddd = torch.ones(1, 1, n_dim)
-            for i in range(n_dim):
-                ddd[0, 0, i] = i / n_dim
+            ratio_0_to_1 = layer_id / (num_hidden_layers - 1)  # 0 to 1
+            ratio_1_to_almost0 = 1.0 - (layer_id / num_hidden_layers)  # 1 to ~0
+            ddd = torch.ones(1, 1, hidden_size)
+            for i in range(hidden_size):
+                ddd[0, 0, i] = i / hidden_size
             
             self.time_maa_x = nn.Parameter(1.0 - torch.pow(ddd, ratio_1_to_almost0)).to(device, dtype=dtype)
             self.time_maa_q = nn.Parameter(1.0 - torch.pow(ddd, 0.5 * ratio_1_to_almost0)).to(device, dtype=dtype)
@@ -51,23 +51,23 @@ class GoldFinchGPTAlphaGoCo(nn.Module):
             self.time_maa_v = nn.Parameter(1.0 - (torch.pow(ddd, ratio_1_to_almost0) + 0.3 * ratio_0_to_1)).to(device, dtype=dtype)
             
             D_MIX_DIM = 32
-            self.time_maa_q_w1 = nn.Parameter(torch.zeros(n_dim, D_MIX_DIM)).to(device, dtype=dtype)
-            self.time_maa_q_w2 = nn.Parameter(torch.empty(D_MIX_DIM, n_dim).uniform_(-0.01, 0.01)).to(device, dtype=dtype)
-            self.time_maa_kv_w1 = nn.Parameter(torch.zeros(n_dim, D_MIX_DIM*2)).to(device, dtype=dtype)
-            self.time_maa_kv_w2 = nn.Parameter(torch.empty(2, D_MIX_DIM, n_dim).uniform_(-0.01, 0.01)).to(device, dtype=dtype)
+            self.time_maa_q_w1 = nn.Parameter(torch.zeros(hidden_size, D_MIX_DIM)).to(device, dtype=dtype)
+            self.time_maa_q_w2 = nn.Parameter(torch.empty(D_MIX_DIM, hidden_size).uniform_(-0.01, 0.01)).to(device, dtype=dtype)
+            self.time_maa_kv_w1 = nn.Parameter(torch.zeros(hidden_size, D_MIX_DIM*2)).to(device, dtype=dtype)
+            self.time_maa_kv_w2 = nn.Parameter(torch.empty(2, D_MIX_DIM, hidden_size).uniform_(-0.01, 0.01)).to(device, dtype=dtype)
 
-            D_VALUE_DIM = max(n_dim // 16, 64)
-            self.time_key_w1 = nn.Parameter(torch.zeros(n_dim, D_VALUE_DIM)).to(device, dtype=dtype)
-            self.time_key_w2 = nn.Parameter(torch.zeros(D_VALUE_DIM, n_dim_att).uniform_(-0.01, 0.01)).to(device, dtype=dtype)
-            self.time_value_w1 = nn.Parameter(torch.zeros(n_dim, D_VALUE_DIM)).to(device, dtype=dtype)
-            self.time_value_w2 = nn.Parameter(torch.zeros(D_VALUE_DIM, n_dim_att).uniform_(-0.01, 0.01)).to(device, dtype=dtype)
+            D_VALUE_DIM = max(hidden_size // 16, 64)
+            self.time_key_w1 = nn.Parameter(torch.zeros(hidden_size, D_VALUE_DIM)).to(device, dtype=dtype)
+            self.time_key_w2 = nn.Parameter(torch.zeros(D_VALUE_DIM, hidden_size_att).uniform_(-0.01, 0.01)).to(device, dtype=dtype)
+            self.time_value_w1 = nn.Parameter(torch.zeros(hidden_size, D_VALUE_DIM)).to(device, dtype=dtype)
+            self.time_value_w2 = nn.Parameter(torch.zeros(D_VALUE_DIM, hidden_size_att).uniform_(-0.01, 0.01)).to(device, dtype=dtype)
 
-        self.query = nn.Linear(n_dim, n_dim_att, bias=False, device=device, dtype=dtype)
-        self.output = nn.Linear(n_dim_att, n_dim, bias=False, device=device, dtype=dtype)
-        self.ln_q = nn.LayerNorm(n_dim_att, device=device, dtype=dtype)
-        self.ln_k = nn.LayerNorm(n_dim_att, device=device, dtype=dtype)
-        self.ln_v = nn.LayerNorm(n_dim_att, device=device, dtype=dtype)
-        self.ln_x = nn.LayerNorm(n_dim_att, device=device, dtype=dtype)
+        self.query = nn.Linear(hidden_size, hidden_size_att, bias=False, device=device, dtype=dtype)
+        self.output = nn.Linear(hidden_size_att, hidden_size, bias=False, device=device, dtype=dtype)
+        self.ln_q = nn.LayerNorm(hidden_size_att, device=device, dtype=dtype)
+        self.ln_k = nn.LayerNorm(hidden_size_att, device=device, dtype=dtype)
+        self.ln_v = nn.LayerNorm(hidden_size_att, device=device, dtype=dtype)
+        self.ln_x = nn.LayerNorm(hidden_size_att, device=device, dtype=dtype)
 
         # timeshifting util
         self.time_shift = nn.ZeroPad2d((0, 0, 1, -1))
