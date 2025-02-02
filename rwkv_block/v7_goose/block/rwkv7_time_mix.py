@@ -330,6 +330,12 @@ class RWKV7TimeMix(torch.nn.Module):
             # FLA runs with the softplus w
             w = -F.softplus(-(self.w0 + w)) - 0.5
             xx, wkv_state_out = rwkv7_attn_fla(r, w, k, v, kk, iclr, BATCH_SIZE, SEQ_LEN, N_HEAD, HEAD_SIZE, xx, wkv_state_in) 
+        elif tmix_backend == "fla_fused" or tmix_backend == "fused_fla":
+            # FLA based method for rwkv attention
+            from .kernel.rwkv7_attn_fla_fused import rwkv7_attn_fused_reccurent_fla
+            # FLA runs with the softplus w
+            w = -F.softplus(-(self.w0 + w)) - 0.5
+            xx, wkv_state_out = rwkv7_attn_fused_reccurent_fla(r, w, k, v, kk, iclr, BATCH_SIZE, SEQ_LEN, N_HEAD, HEAD_SIZE, xx, wkv_state_in) 
         else:
             raise ValueError(f"Unknown tmix_backend: {tmix_backend}")
 
