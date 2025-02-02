@@ -22,7 +22,7 @@ class RWKV7GooseModel(nn.Module):
         num_hidden_layers = configMap.num_hidden_layers
         vocab_size = configMap.vocab_size
         device = configMap.get_device('cpu')
-        dtype = configMap.get_dtype('bfloat16')
+        dtype = configMap.get_torch_dtype('bfloat16')
         hidden_size = configMap.hidden_size
 
         # Embedding layer
@@ -57,7 +57,7 @@ class RWKV7GooseModel(nn.Module):
         num_hidden_layers = configMap.num_hidden_layers
         vocab_size = configMap.vocab_size
         device = configMap.get_device('cpu')
-        dtype = configMap.get_dtype('bfloat16')
+        dtype = configMap.get_torch_dtype('bfloat16')
         hidden_size = configMap.hidden_size
         
         # Iterate and reset the blocks

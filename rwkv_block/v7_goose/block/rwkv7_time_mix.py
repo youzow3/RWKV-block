@@ -35,7 +35,7 @@ class RWKV7TimeMix(torch.nn.Module):
 
         # Get required props
         hidden_size = configMap.hidden_size
-        num_hidden_layers = configMap.num_hidden_layers
+        # num_hidden_layers = configMap.num_hidden_layers
 
         # Get the layer id
         layer_id = configMap.get_layer_id(0)
@@ -43,7 +43,7 @@ class RWKV7TimeMix(torch.nn.Module):
 
         # Get optional props
         device = configMap.get_device('cpu')
-        dtype = configMap.get_dtype('bfloat16')
+        dtype = configMap.get_torch_dtype('bfloat16')
 
         # By default, hidden_size_ffn = hidden_size
         hidden_size_att = configMap.get_hidden_size_att()
@@ -54,7 +54,6 @@ class RWKV7TimeMix(torch.nn.Module):
         # Head size settings
         head_size = configMap.head_size
         self.head_size = head_size
-        head_size_divisor = configMap.head_size_divisor
 
         # Number of heads
         n_head = hidden_size_att // head_size
@@ -124,7 +123,7 @@ class RWKV7TimeMix(torch.nn.Module):
 
         # Get optional props
         device = configMap.get_device('cpu')
-        dtype = configMap.get_dtype('bfloat16')
+        dtype = configMap.get_torch_dtype('bfloat16')
 
         # By default, hidden_size_ffn = hidden_size
         hidden_size_att = configMap.get_hidden_size_att()
@@ -134,7 +133,6 @@ class RWKV7TimeMix(torch.nn.Module):
 
         # Head size settings
         head_size = self.head_size
-        head_size_divisor = configMap.head_size_divisor
 
         # Number of heads
         n_head = hidden_size_att // head_size
