@@ -24,7 +24,7 @@ class RWKV7GooseModel(nn.Module):
         device = configMap.get_device('cpu')
         dtype = configMap.get_dtype('bfloat16')
         n_dim = configMap.n_dim
-        
+
         # Embedding layer
         self.emb = nn.Embedding(n_vocab, n_dim, device=device, dtype=dtype)
 
@@ -161,6 +161,19 @@ class RWKV7GooseModel(nn.Module):
 
         # Forward internally
         return self._forward_internal(idx, prv_stateList, ret_stateList, overwrite_ret_tensor=True)
+    
+    def _forward_block_hook(self, 
+            block:RWKV7LayerBlock, 
+            x_hidden_state:torch.Tensor, 
+            prv_stateList:list[tuple[torch.Tensor,torch.Tensor,torch.Tensor]], 
+            v_first:torch.Tensor
+        ) -> tuple[torch.Tensor,tuple[torch.Tensor,torch.Tensor,torch.Tensor],torch.Tensor]:
+        '''
+        Forward block hook operation, that is easily overridable.
+        To implement gradient checkpointing for use in various trainers
+        '''
+        x_hidden_state = x_hidden_state.to(block.ln1.weight.device, non_blocking=True)
+        return block(x_hidden_state, prv_stateList, v_first)
 
     def _forward_internal(
         self, idx:torch.Tensor, 
@@ -181,16 +194,16 @@ class RWKV7GooseModel(nn.Module):
         # Iterate the block layers, compute the x_hidden_state
         if overwrite_ret_tensor:
             for i, block in enumerate(self.blocks):
-                x_hidden_state = x_hidden_state.to(block.ln1.weight.device, non_blocking=True)
-                x_hidden_state, last_block_state, v_first = block(x_hidden_state, prv_stateList[i], v_first)
+                # x_hidden_state, last_block_state, v_first = block(x_hidden_state, prv_stateList[i], v_first)
+                x_hidden_state, last_block_state, v_first = self._forward_block_hook(block, x_hidden_state, prv_stateList[i], v_first)
                 ret_stateList[i][0][:] = last_block_state[0]
                 ret_stateList[i][1][:] = last_block_state[1]
                 ret_stateList[i][2][:] = last_block_state[2]
         else:
             ret_stateList = [ None for i in range( len(self.blocks) ) ]
             for i, block in enumerate(self.blocks):
-                x_hidden_state = x_hidden_state.to(block.ln1.weight.device, non_blocking=True)
-                x_hidden_state, ret_sublist, v_first = block(x_hidden_state, prv_stateList[i], v_first)
+                # x_hidden_state, ret_sublist, v_first = block(x_hidden_state, prv_stateList[i], v_first)
+                x_hidden_state, ret_sublist, v_first = self._forward_block_hook(block, x_hidden_state, prv_stateList[i], v_first)
                 ret_stateList[i] = ret_sublist
 
         # Final layer norm, and head
