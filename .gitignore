@@ -6,3 +6,6 @@ __*__
 # Add back .gitignore
 !.gitignore
 !.git*
+
+# Ignore copies of the rwkv_block used in the hf_builder
+hf_builder/**/rwkv_block/*
