@@ -78,7 +78,9 @@ class GoldFinchBlockConfigMap:
         '''
         if self.device is not None:
             return torch.device(self.device)
-        return torch.device(fallback)
+        if fallback is not None:
+            return torch.device(fallback)
+        return torch.get_default_device()
     
     def get_dtype(self, fallback:str) -> torch.dtype:
         '''

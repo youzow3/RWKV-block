@@ -25,7 +25,7 @@ class GoldFinchGPTAlphaGoCo(nn.Module):
         # Get optional props
         hidden_size_att = configMap.get_hidden_size_att()
         layer_id = configMap.get_layer_id(0)
-        device = configMap.get_device('cpu')
+        device = configMap.get_device(None)
         dtype = configMap.get_dtype('bfloat16')
 
         n_head = configMap.get_n_head()

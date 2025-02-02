@@ -22,7 +22,7 @@ class RWKV6ChannelMix(torch.nn.Module):
         # Get optional props
         hidden_size_ffn = configMap.get_hidden_size_ffn()
         layer_id = configMap.get_layer_id(0)
-        device = configMap.get_device('cpu')
+        device = configMap.get_device(None)
         dtype = configMap.get_dtype('bfloat16')
 
         # Build the various params

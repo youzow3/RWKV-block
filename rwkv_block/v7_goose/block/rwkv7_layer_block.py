@@ -21,7 +21,7 @@ class RWKV7LayerBlock(torch.nn.Module):
 
         # Get required props
         hidden_size = configMap.hidden_size
-        device = configMap.get_device('cpu')
+        device = configMap.get_device(None)
         dtype = configMap.get_dtype('bfloat16')
         dropout_rate = configMap.dropout_rate
 
@@ -58,7 +58,7 @@ class RWKV7LayerBlock(torch.nn.Module):
 
         # Get required props
         hidden_size = configMap.hidden_size
-        device = configMap.get_device('cpu')
+        device = configMap.get_device(None)
         dtype = configMap.get_dtype('bfloat16')
         dropout_rate = configMap.dropout_rate
 

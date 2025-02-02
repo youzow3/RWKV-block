@@ -21,7 +21,7 @@ class RWKV5EagleModel(nn.Module):
         # Get the required prop
         num_hidden_layers = configMap.num_hidden_layers
         vocab_size = configMap.vocab_size
-        device = configMap.get_device('cpu')
+        device = configMap.get_device(None)
         dtype = configMap.get_dtype('bfloat16')
         hidden_size = configMap.hidden_size
         

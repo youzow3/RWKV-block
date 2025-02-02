@@ -22,7 +22,7 @@ class RWKV5LayerBlock(torch.nn.Module):
         # Get required props
         hidden_size = configMap.hidden_size
         layer_id = configMap.get_layer_id(-1)
-        device = configMap.get_device('cpu')
+        device = configMap.get_device(None)
         dtype = configMap.get_dtype('bfloat16')
         dropout_rate = configMap.dropout_rate
 

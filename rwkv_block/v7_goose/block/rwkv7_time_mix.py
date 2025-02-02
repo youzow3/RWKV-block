@@ -42,7 +42,7 @@ class RWKV7TimeMix(torch.nn.Module):
         self.layer_id = layer_id
 
         # Get optional props
-        device = configMap.get_device('cpu')
+        device = configMap.get_device(None)
         dtype = configMap.get_dtype('bfloat16')
 
         # By default, hidden_size_ffn = hidden_size
@@ -122,7 +122,7 @@ class RWKV7TimeMix(torch.nn.Module):
         layer_id = self.layer_id
 
         # Get optional props
-        device = configMap.get_device('cpu')
+        device = configMap.get_device(None)
         dtype = configMap.get_dtype('bfloat16')
 
         # By default, hidden_size_ffn = hidden_size
@@ -277,7 +277,7 @@ class RWKV7TimeMix(torch.nn.Module):
             if triton is None or self.receptance.weight.device.type == "cpu":
                 tmix_backend = "pytorch"
             else:
-                tmix_backend = "triton"
+                tmix_backend = "cuda"
 
         if tmix_backend == "pytorch_ref" or tmix_backend == "pytorch_ref_ori":
             # Pure pytorch mode for rwkv attention

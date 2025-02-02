@@ -24,7 +24,7 @@ class RWKV7ChannelMix(torch.nn.Module):
 
         # Get various props
         hidden_size = configMap.hidden_size
-        device = configMap.get_device('cpu')
+        device = configMap.get_device(None)
         dtype = configMap.get_dtype('bfloat16')
 
         # By default, hidden_size_ffn = hidden_size * 4
@@ -48,7 +48,7 @@ class RWKV7ChannelMix(torch.nn.Module):
 
         # Get optional props
         layer_id = configMap.get_layer_id(0)
-        device = configMap.get_device('cpu')
+        device = configMap.get_device(None)
         dtype = configMap.get_dtype('bfloat16')
 
         # By default, hidden_size_ffn = hidden_size * 4
