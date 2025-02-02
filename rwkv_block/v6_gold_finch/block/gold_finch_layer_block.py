@@ -25,7 +25,7 @@ class GoldFinchLayerBlock(nn.Module):
         hidden_size = configMap.hidden_size
         layer_id = configMap.get_layer_id(-1)
         device = configMap.get_device('cpu')
-        dtype = configMap.get_torch_dtype('bfloat16')
+        dtype = configMap.get_dtype('bfloat16')
         dropout_rate = configMap.dropout_rate
 
         att_type = configMap.att_type

@@ -26,7 +26,7 @@ class RWKV6TimeMix(torch.nn.Module):
         hidden_size_att = configMap.get_hidden_size_att()
         layer_id = configMap.get_layer_id(0)
         device = configMap.get_device('cpu')
-        dtype = configMap.get_torch_dtype('bfloat16')
+        dtype = configMap.get_dtype('bfloat16')
 
         n_head = configMap.get_n_head()
         head_size = configMap.head_size

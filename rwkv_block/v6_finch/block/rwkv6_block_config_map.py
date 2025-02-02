@@ -76,7 +76,7 @@ class RWKV6BlockConfigMap:
             return torch.device(self.device)
         return torch.device(fallback)
     
-    def get_torch_dtype(self, fallback:str) -> torch.dtype:
+    def get_dtype(self, fallback:str) -> torch.dtype:
         '''
         Returns the dtype
         '''

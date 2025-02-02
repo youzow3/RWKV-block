@@ -43,7 +43,7 @@ class RWKV7TimeMix(torch.nn.Module):
 
         # Get optional props
         device = configMap.get_device('cpu')
-        dtype = configMap.get_torch_dtype('bfloat16')
+        dtype = configMap.get_dtype('bfloat16')
 
         # By default, hidden_size_ffn = hidden_size
         hidden_size_att = configMap.get_hidden_size_att()
@@ -123,7 +123,7 @@ class RWKV7TimeMix(torch.nn.Module):
 
         # Get optional props
         device = configMap.get_device('cpu')
-        dtype = configMap.get_torch_dtype('bfloat16')
+        dtype = configMap.get_dtype('bfloat16')
 
         # By default, hidden_size_ffn = hidden_size
         hidden_size_att = configMap.get_hidden_size_att()

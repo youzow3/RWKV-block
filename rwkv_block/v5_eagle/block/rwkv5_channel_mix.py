@@ -24,7 +24,7 @@ class RWKV5ChannelMix(torch.nn.Module):
         hidden_size_ffn = configMap.get_hidden_size_ffn()
         layer_id = configMap.get_layer_id(0)
         device = configMap.get_device('cpu')
-        dtype = configMap.get_torch_dtype('bfloat16')
+        dtype = configMap.get_dtype('bfloat16')
 
         # Build the various params
         # ---
