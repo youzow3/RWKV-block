@@ -1,11 +1,10 @@
-import torch, os, time
-from fla.ops.rwkv7.fused_recurrent import fused_recurrent_rwkv7
-
 def rwkv7_attn_fused_reccurent_fla(
     r,w,k,v, kk,iclr, 
     BATCH_SIZE, SEQ_LEN, N_HEAD, HEAD_SIZE,
     xx, wkv_state_in
 ):
+    from fla.ops.rwkv7.fused_recurrent import fused_recurrent_rwkv7
+
     # Preprocessing the FLA
     r,w,k,v,a,b = [i.view(BATCH_SIZE,SEQ_LEN,N_HEAD,-1) for i in [r,w,k,v,-kk,(kk*iclr)]]
     log_w = -w.float().exp()
