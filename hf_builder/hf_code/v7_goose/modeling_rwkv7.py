@@ -36,6 +36,10 @@ class RWKV7PreTrainedModel(PreTrainedModel,RWKV7GooseModel):
     _keep_in_fp32_modules = []
     supports_gradient_checkpointing = True
 
+    def __init__(self, config: RWKV7Config):
+        RWKV7GooseModel.__init__(self, config)
+        self.config = config # This is required for HF
+
     def _init_weights(
         self,
         module

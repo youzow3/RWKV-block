@@ -12,9 +12,11 @@ class RWKV7GooseModel(nn.Module):
     Simplified implementation
     '''
 
-    def __init__(self, config: Union[RWKV7GooseConfigMap, any]):
+    def __init__(self, config: Union[RWKV7GooseConfigMap, any, None] = None):
+        # Initialize the base class
         super().__init__()
 
+        # Normalize the config
         configMap:RWKV7GooseConfigMap = RWKV7GooseConfigMap.normalize(config)
         self.configMap = configMap
 
