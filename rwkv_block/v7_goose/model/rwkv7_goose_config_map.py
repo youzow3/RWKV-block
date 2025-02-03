@@ -11,6 +11,19 @@ class RWKV7GooseConfigMap(RWKV7BlockConfigMap):
     vocab_size: int = 65536 
     init_state_wkv: bool = False
 
+    # ---
+    # Initializer, with excess arg ignore
+    # ---
+    def __init__(
+        self,
+        vocab_size: int = 65536,
+        init_state_wkv: bool = False,
+        **kwargs
+    ) -> None:
+        self.vocab_size = vocab_size
+        self.init_state_wkv = init_state_wkv
+        super().__init__(**kwargs)
+        
     @staticmethod
     def normalize(config_map: any) -> 'RWKV7GooseConfigMap':
         '''
