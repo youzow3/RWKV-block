@@ -9,3 +9,5 @@ __*__
 
 # Ignore copies of the rwkv_block used in the hf_builder
 hf_builder/**/rwkv_block/*
+hf_builder/**/modeling_blocks_*
+hf_builder/**/cuda/*

@@ -31,15 +31,25 @@ class RWKV7PreTrainedModel(PreTrainedModel):
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained models.
     """
     config_class = RWKV7Config
+    
     base_model_prefix = "model"
     is_parallelizable = True
     _no_split_modules = ["RWKV7LayerBlock"]
     _keep_in_fp32_modules = []
-    supports_gradient_checkpointing = True
 
-    def __init__(self, config: RWKV7Config):
+    # Enable gradient checkpointing by default
+    supports_gradient_checkpointing = True
+    gradient_checkpointing = True
+
+    def __init__(self, config: RWKV7Config=None):
+        if config is None and self.config is not None:
+            config = self.config
+        else:
+            self.config = config
+        if config is None:
+            raise ValueError("Missing `config` or `config` attribute in the class")
+            
         super().__init__(config)
-        self.config = config
         
     def _init_weights(
         self,
@@ -186,9 +196,13 @@ RWKV7_INPUTS_DOCSTRING = r"""
     "The bare RWKV7 Model transformer outputting raw hidden-states without activating the head (variable is still declared)",
     RWKV7_START_DOCSTRING,
 )
-class RWKV7Model(RWKV7PreTrainedModel,RWKV7GooseModel):
+class RWKV7Model(RWKV7GooseModel, RWKV7PreTrainedModel):
     def __init__(self, config: RWKV7Config):
+        # Work around for multiple inheritance
+        self.config = config
         super().__init__(config)
+        # RWKV7GooseModel.__init__(self,config)
+        # RWKV7PreTrainedModel.__init__(self,config)
     
     def get_input_embeddings(self):
         return self.emb
@@ -298,13 +312,13 @@ class RWKV7Model(RWKV7PreTrainedModel,RWKV7GooseModel):
             attentions=all_attns
         )
 
-@add_start_docstrings(
-    """
-    The RWKV Model transformer with a language modeling head on top (linear layer with weights tied to the input
-    embeddings).
-    """,
-    RWKV7_START_DOCSTRING,
-)
+# @add_start_docstrings(
+#     """
+#     The RWKV Model transformer with a language modeling head on top (linear layer with weights tied to the input
+#     embeddings).
+#     """,
+#     RWKV7_START_DOCSTRING,
+# )
 class RWKV7ForCausalLM(RWKV7Model, GenerationMixin):
 
     def __init__(self, config):
@@ -379,10 +393,10 @@ class RWKV7ForCausalLM(RWKV7Model, GenerationMixin):
         # Return the formated output
         return model_kwargs
     
-    @add_start_docstrings_to_model_forward(RWKV7_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        output_type=RWKV7CausalLMOutput,
-    )
+    # @add_start_docstrings_to_model_forward(RWKV7_INPUTS_DOCSTRING)
+    # @add_code_sample_docstrings(
+    #     output_type=RWKV7CausalLMOutput,
+    # )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
