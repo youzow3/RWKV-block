@@ -3,9 +3,11 @@
 from transformers.configuration_utils import PretrainedConfig
 # from transformers.utils import logging
 # logger = logging.get_logger(__name__)
-from .rwkv_block.v7_goose.model.rwkv7_goose_config_map import RWKV7GooseConfigMap
 
-class RWKV7Config(PretrainedConfig, RWKV7GooseConfigMap):
+# Import the dependencies
+from .modeling_blocks_rwkv7 import RWKV7GooseConfigMap
+
+class RWKV7Config(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`Rwkv7Model`]. It is used to instantiate a RWKV7
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -41,6 +43,8 @@ class RWKV7Config(PretrainedConfig, RWKV7GooseConfigMap):
         dtype (`str`, *optional*):
             Model weights data type. Use the respective torch.dtype types
 
+        use_cache (bool):
+            Reuse of the past rwkv state to reduce token computations. Defaults to `True`.
         bos_token_id (`int`, *optional*, defaults to 0):
             The id of the beginning of sentence token in the vocabulary. Defaults to 0.
         eos_token_id (`int`, *optional*, defaults to 0):
@@ -68,6 +72,9 @@ class RWKV7Config(PretrainedConfig, RWKV7GooseConfigMap):
 
     def __init__(
         self,
+        ########################################
+        # RWKV-block configuration
+        ########################################
         # Vocab, layer count, and hidden size
         vocab_size=65536,
         num_hidden_layers=24,
@@ -79,43 +86,51 @@ class RWKV7Config(PretrainedConfig, RWKV7GooseConfigMap):
         head_size=64,
         tmix_backend="auto",
         init_state_wkv=False,
-        # Torch device and dtype
-        device=None,
-        dtype=None,
-        # Tokenizer related settings in HF configuration
+        # Trainer model configs
+        dropout_rate=0.0,
+        # # Torch device and dtype
+        # device=None,
+        # dtype=None,
+        ########################################
+        # HF specific configuration
+        ########################################
+        use_cache=True,
         bos_token_id=0,
         eos_token_id=0,
         tie_word_embeddings=False,
+        ########################################
         **kwargs,
     ):
         # Normalize dtype if torch_dtype is set within kwargs
-        if dtype is None and "torch_dtype" in kwargs:
-            dtype = kwargs["torch_dtype"]
+        if "torch_dtype" in kwargs:
+            kwargs["dtype"] = kwargs["torch_dtype"]
 
+        self.vocab_size = vocab_size
+        self.num_hidden_layers = num_hidden_layers
+        self.hidden_size = hidden_size
+        self.hidden_size_att = hidden_size_att
+        self.hidden_size_ffn = hidden_size_ffn
+
+        self.head_size = head_size
+        self.tmix_backend = tmix_backend
+        self.init_state_wkv = init_state_wkv
+
+        # self.device = device
+        # self.dtype = dtype
+
+        self.dropout_rate = dropout_rate
+        self.use_cache = use_cache
+        
         # Forward to the HF PretrainedConfig
-        PretrainedConfig.__init__(
-            self,
+        super().__init__(
             tie_word_embeddings=tie_word_embeddings, 
             bos_token_id=bos_token_id, 
             eos_token_id=eos_token_id, 
             **kwargs
         )
 
-        # Forward to the RWKV7GooseConfigMap
-        RWKV7GooseConfigMap.__init__(
-            self,
-            # Vocab, layer count, and hidden size
-            vocab_size=vocab_size,
-            num_hidden_layers=num_hidden_layers,
-            hidden_size=hidden_size,
-            # Optional hidden sizes
-            hidden_size_att=hidden_size_att,
-            hidden_size_ffn=hidden_size_ffn,
-            # Headsize, timemix backend, init_state_wkv
-            head_size=head_size,
-            tmix_backend=tmix_backend,
-            init_state_wkv = init_state_wkv,
-            # Torch device and dtype
-            device=device,
-            dtype=dtype
-        )
+    @staticmethod
+    def from_model_state_dict(state_dict: dict, **kwargs):
+        goose_config = RWKV7GooseConfigMap.from_model_state_dict(state_dict)
+        # Join dictionary with **goose_config.__dict__ and **kwargs
+        return RWKV7Config(**{**goose_config.__dict__, **kwargs})
