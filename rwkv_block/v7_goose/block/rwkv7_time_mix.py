@@ -307,7 +307,7 @@ class RWKV7TimeMix(torch.nn.Module):
         elif tmix_backend == "triton_bighead":
             if triton is None:
                 raise ValueError("Triton not available, unable to load triton kernel")
-            from .kernel.rwkv7_attn_triton_bighead import rwkv7_attn_triton_bighead
+            from .kernel.rwkv7_attn_triton import rwkv7_attn_triton_bighead
             w = -F.softplus(-(self.w0 + w)) - 0.5
             xx, wkv_state_out = rwkv7_attn_triton_bighead(r, w, k, v, kk, iclr, s0=wkv_state_in)
         elif tmix_backend == "cuda_ref":
@@ -330,7 +330,7 @@ class RWKV7TimeMix(torch.nn.Module):
             xx, wkv_state_out = rwkv7_attn_fla(r, w, k, v, kk, iclr, BATCH_SIZE, SEQ_LEN, N_HEAD, HEAD_SIZE, xx, wkv_state_in) 
         elif tmix_backend == "fla_fused" or tmix_backend == "fused_fla":
             # FLA based method for rwkv attention
-            from .kernel.rwkv7_attn_fla_fused import rwkv7_attn_fused_reccurent_fla
+            from .kernel.rwkv7_attn_fla import rwkv7_attn_fused_reccurent_fla
             # FLA runs with the softplus w
             w = -F.softplus(-(self.w0 + w)) - 0.5
             xx, wkv_state_out = rwkv7_attn_fused_reccurent_fla(r, w, k, v, kk, iclr, BATCH_SIZE, SEQ_LEN, N_HEAD, HEAD_SIZE, xx, wkv_state_in) 
