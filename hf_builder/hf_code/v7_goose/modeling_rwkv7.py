@@ -22,22 +22,23 @@ import warnings
 from dataclasses import dataclass
 from typing import List, Dict, Optional, Tuple, Union, Any
 
+# Load the RWKV7Config and RWKV7GooseModel
 from .configuration_rwkv7 import RWKV7Config
-from .rwkv_block.v7_goose.model.rwkv7_goose_model import RWKV7GooseModel
+from .modeling_blocks_rwkv7 import RWKV7GooseModel
 
-class RWKV7PreTrainedModel(PreTrainedModel,RWKV7GooseModel):
+class RWKV7PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained models.
     """
     config_class = RWKV7Config
-    base_model_prefix = "rwkv7"
+    base_model_prefix = "model"
     is_parallelizable = True
     _no_split_modules = ["RWKV7LayerBlock"]
     _keep_in_fp32_modules = []
     supports_gradient_checkpointing = True
 
     def __init__(self, config: RWKV7Config):
-        RWKV7GooseModel.__init__(self, config)
+        super().__init__(config)
         self.config = config
         
     def _init_weights(
@@ -185,7 +186,7 @@ RWKV7_INPUTS_DOCSTRING = r"""
     "The bare RWKV7 Model transformer outputting raw hidden-states without activating the head (variable is still declared)",
     RWKV7_START_DOCSTRING,
 )
-class RWKV7Model(RWKV7PreTrainedModel):
+class RWKV7Model(RWKV7PreTrainedModel,RWKV7GooseModel):
     def __init__(self, config: RWKV7Config):
         super().__init__(config)
     
