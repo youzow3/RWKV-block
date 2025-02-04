@@ -89,7 +89,7 @@ def rwkv7_attn_cuda_ref(q,w,k,v, kk,iclr, HEAD_SIZE=64, s0=None):
     s0 = torch.zeros(B,H,C,C, dtype=torch.float,device=w.device) if s0 is None else s0
     
     # Handling the cuda kernel
-    q,w,k,v,a,b = [i.view(B,T,H,C) for i in [q,w,k,v,(-kk),(kk*iclr)]]
+    q,w,k,v,a,b = [i.view(B,T,H,C).contiguous() for i in [q,w,k,v,(-kk),(kk*iclr)]]
 
     # Forward with backprop
     xx = RefCudaWindBackstepping.apply(w,q,k,v,a,b)
@@ -215,12 +215,12 @@ def rwkv7_attn_cuda_chunk(r,w,k,v, kk,iclr, HEAD_SIZE=64, s0=None):
 
     # Handling the cuda kernel
     a,b = -kk, (kk*iclr)
-    r,w,k,v,a,b = [i.view(B,T,H,C) for i in [r,w,k,v,a,b]]
+    r,w,k,v,a,b = [i.view(B,T,H,C).contiguous() for i in [r,w,k,v,a,b]]
 
     if s0 is None:
-        s1 = torch.zeros(B,H,C,C, dtype=torch.float,device=w.device)
+        s1 = torch.zeros(B,H,C,C, dtype=torch.float,device=w.device).contiguous()
     else:
-        s1 = s0.clone()
+        s1 = s0.clone().contiguous()
 
     # Forward with backprop
     xx = CudaWindBackstepping.apply(s1,w,r,k,v,a,b)
