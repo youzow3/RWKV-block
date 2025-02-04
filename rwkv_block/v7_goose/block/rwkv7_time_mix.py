@@ -298,13 +298,13 @@ class RWKV7TimeMix(torch.nn.Module):
             # Tweaked pytorch compile varient
             w = torch.exp(-0.606531 * torch.sigmoid((self.w0 + w).float())) # 0.606531 = exp(-0.5)
             xx, wkv_state_out = rwkv7_attn_pytorch(r, w, k, v, kk, iclr, BATCH_SIZE, SEQ_LEN, N_HEAD, HEAD_SIZE, xx, wkv_state_in) 
-        elif tmix_backend == "triton":
+        elif tmix_backend in ["triton", "triton_smallhead", "triton_small"]:
             if triton is None:
                 raise ValueError("Triton not available, unable to load triton kernel")
             from .kernel.rwkv7_attn_triton import rwkv7_attn_triton
             w = -F.softplus(-(self.w0 + w)) - 0.5
             xx, wkv_state_out = rwkv7_attn_triton(r, w, k, v, kk, iclr, s0=wkv_state_in)
-        elif tmix_backend == "triton_bighead":
+        elif tmix_backend in ["triton_bighead", "triton_big"]:
             if triton is None:
                 raise ValueError("Triton not available, unable to load triton kernel")
             from .kernel.rwkv7_attn_triton import rwkv7_attn_triton_bighead
