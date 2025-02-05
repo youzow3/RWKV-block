@@ -37,7 +37,9 @@ class RWKV7Config(PretrainedConfig):
             (Valid values: "auto", "pytorch", "cuda", "triton", "triton_bighead", "fla", "fla_fused", "pytorch_ref", "pytorch_ref_fp32")
         init_state_wkv (`bool`, *optional*, defaults to `False`):
             Whether to initialize the wkv state in the model. Used for WKV state tuning.
-        
+        forward_chunk_size (`int`, *optional*, defaults to 4096):
+            Chunk size for the forward pass. Used to break large inputs into smaller chunks to avoid OOM errors.
+            
         device (`str`, *optional*):
             Device to use for the model. Use the respective torch.device types
         dtype (`str`, *optional*):
@@ -88,6 +90,8 @@ class RWKV7Config(PretrainedConfig):
         init_state_wkv=False,
         # Trainer model configs
         dropout_rate=0.0,
+        # Internal forward chunk size
+        forward_chunk_size=4096,
         # # Torch device and dtype
         # device=None,
         # dtype=None,
@@ -114,6 +118,7 @@ class RWKV7Config(PretrainedConfig):
         self.head_size = head_size
         self.tmix_backend = tmix_backend
         self.init_state_wkv = init_state_wkv
+        self.forward_chunk_size = forward_chunk_size
 
         # self.device = device
         # self.dtype = dtype

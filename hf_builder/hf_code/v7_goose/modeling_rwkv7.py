@@ -13,7 +13,7 @@ from transformers.utils import (
 from transformers.generation import GenerationMixin
 from transformers.modeling_outputs import ModelOutput
 
-import torch
+import torch, math
 from torch import nn
 from torch.nn import CrossEntropyLoss
 import torch.nn.functional as F
@@ -263,18 +263,36 @@ class RWKV7Model(RWKV7GooseModel, RWKV7PreTrainedModel):
             inputs_embeds = self.emb(input_ids.to(self.emb.weight.device))
         x_hidden_state = inputs_embeds
 
+        # Input length to perform chunking by
+        batch_size = x_hidden_state.shape[0]
+        x_input_length = x_hidden_state.shape[1]
+
         # Initialize the rwkv_state / prv_stateList
         if rwkv_state is None or use_cache == False:
-            rwkv_state = self.get_init_state(batch_size=x_hidden_state.shape[0])
+            rwkv_state = self.get_init_state(batch_size=batch_size)
         prv_stateList = rwkv_state
 
         # Initialize the ret_stateList
-        ret_stateList = self.get_init_state(batch_size=x_hidden_state.shape[0], skip_init_state=True)
+        ret_stateList = self.get_init_state(batch_size=batch_size, skip_init_state=True)
        
+        # Internal states
         all_hidden_states = () if output_hidden_states else None
         all_attns = () if output_attentions else None
         v_first = None
         ret_sublist = None
+
+        # Get the forward chunk size, and the chunk count
+        forward_chunk_size = self.config.forward_chunk_size
+        forward_chunk_count = math.ceil( x_input_length / forward_chunk_size )
+
+        # Block forward, with gradient if needed
+        def block_forward(block, in_x_state, in_rwkv_state, in_v_first):
+            if self.gradient_checkpointing and self.training:
+                return self._gradient_checkpointing_func(
+                    block.__call__, in_x_state, in_rwkv_state, in_v_first
+                )
+            else:
+                return block(in_x_state, in_rwkv_state, in_v_first)
         
         # Lets start iterating the blocks
         for i, block in enumerate(self.blocks):
@@ -282,16 +300,38 @@ class RWKV7Model(RWKV7GooseModel, RWKV7PreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (x_hidden_state,)
 
-            # Forward the block
-            if self.gradient_checkpointing and self.training:
-                x_hidden_state, ret_sublist, v_first = self._gradient_checkpointing_func(
-                    block.__call__, x_hidden_state, prv_stateList[i], v_first
-                )
+            # Forward the block as it is
+            if forward_chunk_count <= 1:
+                x_hidden_state, ret_sublist, v_first = block_forward(block, x_hidden_state, prv_stateList[i], v_first)
                 ret_stateList[i] = ret_sublist
             else:
-                x_hidden_state, ret_sublist, v_first = block(x_hidden_state, prv_stateList[i], v_first)
-                ret_stateList[i] = ret_sublist
-            
+                # Damn it, we need to chunk
+                new_x_hidden_state_arr = [None]*forward_chunk_count
+                v_first_arr = [None]*forward_chunk_count if v_first is None else None
+                ret_subList = prv_stateList[i]
+
+                # Forward in chunks
+                for chunk_idx in range(forward_chunk_size):
+                    start = chunk_idx * forward_chunk_size
+                    endin = min(start + forward_chunk_size, x_input_length)
+
+                    new_x_hidden_state, ret_subList, v_first_part = block_forward(
+                        block, 
+                        x_hidden_state[:, start:endin], 
+                        ret_subList, 
+                        v_first[:, start:endin] if v_first is not None else None
+                    )
+
+                    new_x_hidden_state_arr[chunk_idx] = new_x_hidden_state
+                    if v_first_arr is not None:
+                        v_first_arr[chunk_idx] = v_first_part
+
+                # Merge the forward chunks, save the state
+                x_hidden_state = torch.cat(new_x_hidden_state_arr, dim=1)
+                if v_first_arr is not None:
+                    v_first = torch.cat(v_first_arr, dim=1)
+                ret_stateList[i] = ret_subList
+
             # if output_attentions:
             #     all_attns += (ret_sublist,)
         
