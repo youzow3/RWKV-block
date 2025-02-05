@@ -10,6 +10,7 @@ class RWKV7GooseConfigMap(RWKV7BlockConfigMap):
     # This is the world tokenizer size
     vocab_size: int = 65536 
     init_state_wkv: bool = False
+    forward_chunk_size: int = 4096,
 
     # ---
     # Initializer, with excess arg ignore
@@ -18,10 +19,12 @@ class RWKV7GooseConfigMap(RWKV7BlockConfigMap):
         self,
         vocab_size: int = 65536,
         init_state_wkv: bool = False,
+        forward_chunk_size: Optional[int] = 4096,
         **kwargs
     ) -> None:
         self.vocab_size = vocab_size
         self.init_state_wkv = init_state_wkv
+        self.forward_chunk_size = forward_chunk_size
         super().__init__(**kwargs)
         
     @staticmethod

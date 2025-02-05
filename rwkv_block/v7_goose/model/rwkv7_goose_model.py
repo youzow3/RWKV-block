@@ -1,4 +1,4 @@
-import torch
+import torch, math
 from torch import nn
 from torch import Tensor
 from typing import Union
@@ -188,34 +188,96 @@ class RWKV7GooseModel(nn.Module):
         Internal forward operations, which assumes the state is already initialized
         Due to the lack of safety checks, this should not be used directly
         '''
-
         # Lets get the embedding
         idx = idx.to(self.emb.weight.device, non_blocking=True)
         x_hidden_state = self.emb(idx)
+
+        # Forward the block layers
+        x_output_embedding, retStateList = self._forward_internal_embeddings(x_hidden_state, prv_stateList, ret_stateList, overwrite_ret_tensor)
+
+        # Perform the head operation
+        x_output = self.head(x_output_embedding.to(self.head.weight.device, non_blocking=True))
+        
+        # Return the output and the state list
+        return x_output, retStateList
+
+    def _forward_internal_embeddings(
+        self, x_hidden_state:torch.Tensor, 
+        prv_stateList:list[tuple[torch.Tensor,torch.Tensor,torch.Tensor]],  
+        ret_stateList:list[tuple[torch.Tensor,torch.Tensor,torch.Tensor]],
+        overwrite_ret_tensor:bool=False
+    ) -> tuple[torch.Tensor,list[tuple[torch.Tensor,torch.Tensor,torch.Tensor]]]:
+        '''
+        Internal forward operations, which assumes the state is already initialized.
+        And uses the x_hidden_state as the input (generating by the embedding layer)
+        And returns the output embedding before the head layer
+
+        Due to the lack of safety checks, this should not be used directly
+        '''
+        # Get the batch and input length
+        batch_size = x_hidden_state.shape[0]
+        x_input_length = x_hidden_state.shape[1]
+
+        # Initialize the v_first
         v_first = None
 
+        # Force overwrite_ret_tensor to False, if ret_stateList is None
+        if ret_stateList is None:
+            overwrite_ret_tensor = False
+
+        # Get the forward chunk size, and the chunk count
+        forward_chunk_size = self.configMap.forward_chunk_size
+        forward_chunk_count = math.ceil( x_input_length / forward_chunk_size )
+
         # Iterate the block layers, compute the x_hidden_state
-        if overwrite_ret_tensor:
-            for i, block in enumerate(self.blocks):
-                # x_hidden_state, last_block_state, v_first = block(x_hidden_state, prv_stateList[i], v_first)
+        for i, block in enumerate(self.blocks):
+            
+            # Single pass, optimized
+            if forward_chunk_count <= 1:
                 x_hidden_state, last_block_state, v_first = self._forward_block_hook(block, x_hidden_state, prv_stateList[i], v_first)
+            else:
+                # Damn it, we need to chunk
+                new_x_hidden_state_arr = [None]*forward_chunk_count
+                v_first_arr = [None]*forward_chunk_count if v_first is None else None
+                last_block_state = prv_stateList[i]
+
+                # Iterate the chunks
+                for j in range(forward_chunk_count):
+                    start = j * forward_chunk_size
+                    endin = min( start + forward_chunk_size, x_input_length )
+
+                    new_x_hidden_state, last_block_state, v_first_part = self._forward_block_hook(
+                        block, 
+                        x_hidden_state[:,start:endin], 
+                        last_block_state, 
+                        v_first[:, start:endin] if v_first is not None else None
+                    )
+
+                    # Save the chunk
+                    new_x_hidden_state_arr[j] = new_x_hidden_state
+                    if v_first_arr is not None:
+                        v_first_arr[j] = v_first_part
+
+                # Merge the chunks
+                x_hidden_state = torch.cat(new_x_hidden_state_arr, dim=1)
+                if v_first_arr is not None:
+                    v_first = torch.cat(v_first_arr, dim=1)
+
+            # last_block_state = prv_stateList[i]
+            # Overwrite tensor if needed
+            if overwrite_ret_tensor:
                 ret_stateList[i][0][:] = last_block_state[0]
                 ret_stateList[i][1][:] = last_block_state[1]
                 ret_stateList[i][2][:] = last_block_state[2]
-        else:
-            ret_stateList = [ None for i in range( len(self.blocks) ) ]
-            for i, block in enumerate(self.blocks):
-                # x_hidden_state, ret_sublist, v_first = block(x_hidden_state, prv_stateList[i], v_first)
-                x_hidden_state, ret_sublist, v_first = self._forward_block_hook(block, x_hidden_state, prv_stateList[i], v_first)
-                ret_stateList[i] = ret_sublist
-
+            else:
+                ret_stateList[i] = last_block_state
+                
         # Final layer norm, and head
         x_hidden_state = x_hidden_state.to(self.ln_out.weight.device, non_blocking=True)
         x_hidden_state = self.ln_out(x_hidden_state)
-        x_out = self.head(x_hidden_state)
 
         # Return the output and the state list
-        return x_out, ret_stateList
+        return x_hidden_state, ret_stateList
     
     @torch.compile(mode="default")
     def forward_with_default_compile(
