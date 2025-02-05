@@ -311,7 +311,7 @@ class RWKV7Model(RWKV7GooseModel, RWKV7PreTrainedModel):
                 ret_subList = prv_stateList[i]
 
                 # Forward in chunks
-                for chunk_idx in range(forward_chunk_size):
+                for chunk_idx in range(forward_chunk_count):
                     start = chunk_idx * forward_chunk_size
                     endin = min(start + forward_chunk_size, x_input_length)
 
