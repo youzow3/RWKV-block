@@ -59,9 +59,6 @@ class RWKV7PreTrainedModel(PreTrainedModel):
         if hasattr(module, 'reset_parameters'):
             module.reset_parameters()
             return
-        elif hasattr(module, 'init_parameters'):
-            module.init_parameters()
-            return
 
         # Default FP initializer_range for Linear / LN layers
         initializer_range = 0.02

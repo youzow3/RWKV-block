@@ -26,7 +26,7 @@ class RWKV7TimeMix(torch.nn.Module):
         Initialize the TimeMix block.
         
         Note: this does not initialize the parameter weights itself
-        which would depend on the `init_parameters()` method
+        which would depend on the `reset_parameters()` method
         '''
         super().__init__()
 
@@ -108,7 +108,7 @@ class RWKV7TimeMix(torch.nn.Module):
         self.output = nn.Linear(hidden_size_att, hidden_size, bias=False, device=device, dtype=dtype)
         self.ln_x = nn.GroupNorm(n_head, hidden_size_att, device=device, dtype=dtype, eps=(1e-5)*head_size)
         
-    def init_parameters(self):
+    def reset_parameters(self):
         '''
         Reset the parameters of the block, to an initial state used for training a model from scratch
         '''

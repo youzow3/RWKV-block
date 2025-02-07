@@ -14,7 +14,7 @@ class RWKV7ChannelMix(torch.nn.Module):
         Initialize the ChannelMix block.
         
         Note: this does not initialize the parameter weights itself
-        which would depend on the `init_parameters()` method
+        which would depend on the `reset_parameters()` method
         '''
 
         super().__init__()
@@ -36,7 +36,7 @@ class RWKV7ChannelMix(torch.nn.Module):
         self.key = nn.Linear(hidden_size, hidden_size_ffn, bias=False, device=device, dtype=dtype)
         self.value = nn.Linear(hidden_size_ffn, hidden_size, bias=False, device=device, dtype=dtype)
 
-    def init_parameters(self):
+    def reset_parameters(self):
         '''
         Reset the parameters of the block, to an initial state used for training a model from scratch
         '''

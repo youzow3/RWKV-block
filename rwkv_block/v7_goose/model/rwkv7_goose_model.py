@@ -49,7 +49,7 @@ class RWKV7GooseModel(nn.Module):
                 })
             self.init_state = nn.ParameterList(stateTuneList)
 
-    def init_parameters(self):
+    def reset_parameters(self):
         '''
         Reset the parameters of the block, to an initial state used for training a model from scratch
         '''
@@ -64,7 +64,7 @@ class RWKV7GooseModel(nn.Module):
         
         # Iterate and reset the blocks
         for i in range(num_hidden_layers):
-            self.blocks[i].init_parameters()
+            self.blocks[i].reset_parameters()
 
         # Reinit the Embedding layer
         self.emb = nn.Embedding(vocab_size, hidden_size, device=device, dtype=dtype)

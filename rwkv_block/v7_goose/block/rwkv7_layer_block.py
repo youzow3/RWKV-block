@@ -50,7 +50,7 @@ class RWKV7LayerBlock(torch.nn.Module):
             self.drop0 = nn.Identity(device=device)
             self.drop1 = nn.Identity(device=device)
     
-    def init_parameters(self):
+    def reset_parameters(self):
         '''
         Reset the parameters of the block, to an initial state used for training a model from scratch
         '''
@@ -76,9 +76,9 @@ class RWKV7LayerBlock(torch.nn.Module):
         #     self.ln0 = nn.Identity(device=device)
         self.ln0.reset_parameters()
 
-        # Call the sub blocks init_parameters
-        self.att.init_parameters()
-        self.ffn.init_parameters()
+        # Call the sub blocks reset_parameters
+        self.att.reset_parameters()
+        self.ffn.reset_parameters()
 
     def forward(
         self, x:torch.Tensor,
