@@ -61,10 +61,10 @@ class RWKV7ChannelMix(torch.nn.Module):
             ddd = torch.ones(1, 1, hidden_size)
             for i in range(hidden_size):
                 ddd[0, 0, i] = i / hidden_size
-            self.x_k = nn.Parameter( (1.0 - torch.pow(ddd, ratio_1_to_almost0**4)).to(device, dtype=dtype) )
+            self.x_k.copy_((1.0 - torch.pow(ddd, ratio_1_to_almost0**4)).to(device, dtype=dtype))
 
-        self.key = nn.Linear(hidden_size, hidden_size_ffn, bias=False, device=device, dtype=dtype)
-        self.value = nn.Linear(hidden_size_ffn, hidden_size, bias=False, device=device, dtype=dtype)
+        self.key.reset_parameters()
+        self.value.reset_parameters()
 
     def forward(self, x: torch.Tensor, last_state: torch.Tensor) -> tuple[torch.Tensor,torch.Tensor]:
         '''

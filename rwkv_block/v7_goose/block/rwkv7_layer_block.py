@@ -56,24 +56,25 @@ class RWKV7LayerBlock(torch.nn.Module):
         '''
         configMap = self.configMap
 
-        # Get required props
-        hidden_size = configMap.hidden_size
-        device = configMap.get_device(None)
-        dtype = configMap.get_dtype('bfloat16')
-        dropout_rate = configMap.dropout_rate
+        # # Get required props
+        # hidden_size = configMap.hidden_size
+        # device = configMap.get_device(None)
+        # dtype = configMap.get_dtype('bfloat16')
+        # dropout_rate = configMap.dropout_rate
 
-        # Get valid layer_id
-        layer_id = configMap.get_layer_id(-1)
-        assert layer_id >= 0, f'layer_id must be >= 0, got {layer_id}'
+        # # Get valid layer_id
+        # layer_id = configMap.get_layer_id(-1)
+        # assert layer_id >= 0, f'layer_id must be >= 0, got {layer_id}'
 
         # Redo the Setup for the layernorms, and mixes
-        self.ln1 = nn.LayerNorm(hidden_size, device=device, dtype=dtype)
-        self.ln2 = nn.LayerNorm(hidden_size, device=device, dtype=dtype)
+        self.ln1.reset_parameters()
+        self.ln2.reset_parameters()
 
-        if layer_id == 0:
-            self.ln0 = nn.LayerNorm(hidden_size, device=device, dtype=dtype)
-        else:
-            self.ln0 = nn.Identity(device=device)
+        # if layer_id == 0:
+        #     self.ln0 = nn.LayerNorm(hidden_size, device=device, dtype=dtype)
+        # else:
+        #     self.ln0 = nn.Identity(device=device)
+        self.ln0.reset_parameters()
 
         # Call the sub blocks init_parameters
         self.att.init_parameters()

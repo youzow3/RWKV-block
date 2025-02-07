@@ -205,11 +205,11 @@ class RWKV7TimeMix(torch.nn.Module):
             self.k_a.copy_(torch.ones(1,1,hidden_size_att, device=device, dtype=dtype))
             self.r_k.copy_(torch.zeros(n_head,hidden_size_att, device=device, dtype=dtype))
             
-        self.receptance = nn.Linear(hidden_size, hidden_size_att, bias=False, device=device, dtype=dtype)
-        self.key = nn.Linear(hidden_size, hidden_size_att, bias=False, device=device, dtype=dtype)
-        self.value = nn.Linear(hidden_size, hidden_size_att, bias=False, device=device, dtype=dtype)
-        self.output = nn.Linear(hidden_size_att, hidden_size, bias=False, device=device, dtype=dtype)
-        self.ln_x = nn.GroupNorm(n_head, hidden_size_att, device=device, dtype=dtype, eps=(1e-5)*head_size)
+        self.receptance.reset_parameters()
+        self.key.reset_parameters()
+        self.value.reset_parameters()
+        self.output.reset_parameters()
+        self.ln_x.reset_parameters()
 
     def forward(self, x:Tensor, shift_state_in:Tensor, wkv_state_in:Tensor, v_first_val:Tensor) -> tuple[Tensor,Tensor,Tensor,Tensor]:
         '''
