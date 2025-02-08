@@ -100,7 +100,7 @@ class RWKV7TimeMix(torch.nn.Module):
 
             self.k_k = nn.Parameter(torch.empty(1,1,hidden_size_att, device=device, dtype=dtype))
             self.k_a = nn.Parameter(torch.empty(1,1,hidden_size_att, device=device, dtype=dtype))
-            self.r_k = nn.Parameter(torch.empty(n_head, hidden_size_att, device=device, dtype=dtype))
+            self.r_k = nn.Parameter(torch.empty(n_head, head_size, device=device, dtype=dtype))
 
         self.receptance = nn.Linear(hidden_size, hidden_size_att, bias=False, device=device, dtype=dtype)
         self.key = nn.Linear(hidden_size, hidden_size_att, bias=False, device=device, dtype=dtype)
