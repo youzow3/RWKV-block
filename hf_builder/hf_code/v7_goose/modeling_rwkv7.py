@@ -12,6 +12,7 @@ from transformers.utils import (
 )
 from transformers.generation import GenerationMixin
 from transformers.modeling_outputs import ModelOutput
+from transformers.cache_utils import Cache
 
 import torch, math
 from torch import nn
@@ -26,6 +27,104 @@ from typing import List, Dict, Optional, Tuple, Union, Any
 from .configuration_rwkv7 import RWKV7Config
 from .modeling_blocks_rwkv7 import RWKV7GooseModel
 
+class RWKV7State(Cache):
+    '''
+    HF Cache API implementation for RWKV7
+    To speed up inference time by "reusing" KV cache's as a means of "state"
+    '''
+    def __init__(self) -> None:
+        super().__init__()
+        self._seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
+        self.rwkv_state: List[tuple[torch.Tensor,torch.Tensor,torch.Tensor]] = []
+
+    def __getitem__(self, layer_idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Support for backwards-compatible `past_key_value` indexing, e.g. `past_key_value[0][0].shape[2]` to get the
+        sequence length.
+        """
+        if layer_idx < len(self):
+            return self.rwkv_state[layer_idx]
+        else:
+            raise KeyError(f"Cache only has {len(self)} layers, attempted to access layer with index {layer_idx}")
+
+    def __iter__(self):
+        """
+        Support for backwards-compatible `past_key_value` iteration, e.g. `for x in past_key_value:` to iterate over
+        keys and values
+        """
+        for layer_idx in range(len(self)):
+            yield self.rwkv_state[layer_idx]
+
+    def __len__(self):
+        """
+        Support for backwards-compatible `past_key_value` length, e.g. `len(past_key_value)`. This value corresponds
+        to the number of layers in the model.
+        """
+        return len(self.rwkv_state)
+
+    def get_usable_length(self, new_seq_length: int, layer_idx: Optional[int] = 0) -> int:
+        """Given the sequence length of the new inputs, returns the usable length of the cache."""
+        # Linear Attention variants do not have a maximum length
+        return new_seq_length
+
+    def reorder_cache(self, beam_idx: torch.LongTensor):
+        """Reorders the cache for beam search, given the selected beam indices."""
+        raise NotImplementedError('Cannot reorder Linear Attention state')
+
+    def get_seq_length(self, layer_idx: int = 0) -> int:
+        """Returns the sequence length of the cached states. A layer index can be optionally passed."""
+        return self._seen_tokens
+
+    def get_max_cache_shape(self) -> Optional[int]:
+        """Returns the maximum sequence length of the cache object. DynamicCache does not have a maximum length."""
+        return None
+
+    def get_max_length(self) -> Optional[int]:
+        """
+        Returns the maximum sequence length of the cached states. DynamicCache does not have a maximum length.
+        """
+        return None
+
+    def crop(self, max_length: int):
+        # can't implement this for linear attention variants, skips
+        return
+
+    @torch.no_grad
+    def update(
+        self,
+        layer_rwkv_state: Tuple[torch.Tensor,torch.Tensor,torch.Tensor],
+        token_count: int,
+        layer_idx: int,
+        cache_kwargs: Optional[Dict[str, Any]] = None,
+    ) -> Tuple[Tuple[torch.Tensor,torch.Tensor,torch.Tensor], torch.Tensor]:        
+        # Update the number of seen tokens
+        if layer_idx == 0:
+            self._seen_tokens += token_count
+
+        # Update the cache
+        # There may be skipped layers, fill them with empty lists
+        for _ in range(len(self.rwkv_state), layer_idx + 1):
+            self.rwkv_state.append([
+                torch.zeros_like(layer_rwkv_state[0]),
+                torch.zeros_like(layer_rwkv_state[1]),
+                torch.zeros_like(layer_rwkv_state[2])
+            ])
+
+        # Check the batch sizing matches, reset the cache on mismatch
+        batch_size = layer_rwkv_state[0].shape[0]
+        if batch_size != self.rwkv_state[layer_idx][0].shape[0]:
+            self.rwkv_state[layer_idx][0] = torch.zeros_like(layer_rwkv_state[0])
+            self.rwkv_state[layer_idx][1] = torch.zeros_like(layer_rwkv_state[1])
+            self.rwkv_state[layer_idx][2] = torch.zeros_like(layer_rwkv_state[2]) 
+
+        # Update the cache
+        self.rwkv_state[layer_idx][0].copy_(layer_rwkv_state[0])
+        self.rwkv_state[layer_idx][1].copy_(layer_rwkv_state[1])
+        self.rwkv_state[layer_idx][2].copy_(layer_rwkv_state[2])
+
+        # Return the updated cache
+        return self.rwkv_state[layer_idx]
+
 class RWKV7PreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained models.
@@ -36,6 +135,11 @@ class RWKV7PreTrainedModel(PreTrainedModel):
     is_parallelizable = True
     _no_split_modules = ["RWKV7LayerBlock"]
     _keep_in_fp32_modules = []
+
+    # Enable cacching of k/v's
+    _supports_cache_class = True
+    _supports_quantized_cache = False
+    _supports_static_cache = False
 
     # Enable gradient checkpointing by default
     supports_gradient_checkpointing = True
@@ -217,11 +321,14 @@ class RWKV7Model(RWKV7GooseModel, RWKV7PreTrainedModel):
     )
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,  # not in use
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
+        past_key_values: Optional[Cache] = None,
         rwkv_state: Optional[list[tuple[torch.Tensor,torch.Tensor,torch.Tensor]]] = None,
         use_cache: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None, # does nothing
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -230,7 +337,7 @@ class RWKV7Model(RWKV7GooseModel, RWKV7PreTrainedModel):
         
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        use_cache = use_cache if use_cache is not None else (self.config.use_cache if not self.training else False)
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if output_attentions:
@@ -264,23 +371,54 @@ class RWKV7Model(RWKV7GooseModel, RWKV7PreTrainedModel):
         batch_size = x_hidden_state.shape[0]
         x_input_length = x_hidden_state.shape[1]
 
-        # Initialize the rwkv_state / prv_stateList
-        if rwkv_state is None or use_cache == False:
+        # ---
+
+        # Initialize the cache if needed
+        if use_cache and not isinstance(past_key_values, RWKV7State):
+            past_key_values = RWKV7State()
+            past_key_values.rwkv_state = self.get_init_state(batch_size=batch_size)
+
+        # Get the rwkv_state / prv_stateList
+        # Uses the given rwkv_state if given
+        # (high priority over the past_key_values cache)
+        if rwkv_state is None:
+            # From the cache if provided, and if caching is enabled
+            if past_key_values is not None and use_cache:
+                rwkv_state = past_key_values.rwkv_state
+            
+            # No cache, no rwkv_state, initialize a new one
             rwkv_state = self.get_init_state(batch_size=batch_size)
         prv_stateList = rwkv_state
 
         # Initialize the ret_stateList
         ret_stateList = self.get_init_state(batch_size=batch_size, skip_init_state=True)
+
+        # ---
+        # This is useful for rotary embeddings
+        # ---
        
+        # if cache_position is None:
+        #     past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+        #     cache_position = torch.arange(
+        #         past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+        #     )
+
+        # if position_ids is None:
+        #     position_ids = cache_position.unsqueeze(0)
+
+        # ---
+
+        # Get the forward chunk size, and the chunk count
+        forward_chunk_size = self.config.forward_chunk_size
+        forward_chunk_count = math.ceil( x_input_length / forward_chunk_size )
+
         # Internal states
         all_hidden_states = () if output_hidden_states else None
         all_attns = () if output_attentions else None
         v_first = None
         ret_sublist = None
 
-        # Get the forward chunk size, and the chunk count
-        forward_chunk_size = self.config.forward_chunk_size
-        forward_chunk_count = math.ceil( x_input_length / forward_chunk_size )
+        # ---
 
         # Block forward, with gradient if needed
         def block_forward(block, in_x_state, in_rwkv_state, in_v_first):
@@ -292,12 +430,14 @@ class RWKV7Model(RWKV7GooseModel, RWKV7PreTrainedModel):
                 return block(in_x_state, in_rwkv_state, in_v_first)
         
         # Lets start iterating the blocks
+        # ----------------------------------------------------------------------------
         for i, block in enumerate(self.blocks):
             # Build the full inner hidden state
             if output_hidden_states:
                 all_hidden_states += (x_hidden_state,)
 
             # Forward the block as it is
+            # ---
             if forward_chunk_count <= 1:
                 x_hidden_state, ret_sublist, v_first = block_forward(block, x_hidden_state, prv_stateList[i], v_first)
                 ret_stateList[i] = ret_sublist
@@ -328,10 +468,17 @@ class RWKV7Model(RWKV7GooseModel, RWKV7PreTrainedModel):
                 if v_first_arr is not None:
                     v_first = torch.cat(v_first_arr, dim=1)
                 ret_stateList[i] = ret_subList
+            # ---
+
+            # Save the state to cache if needed
+            if past_key_values is not None and use_cache:
+                past_key_values.update(ret_stateList[i], x_input_length, i)
 
             # if output_attentions:
             #     all_attns += (ret_sublist,)
-        
+
+        # ----------------------------------------------------------------------------
+
         # Final layer norm
         x_hidden_state = x_hidden_state.to(self.ln_out.weight.device, non_blocking=True)
         x_hidden_state = self.ln_out(x_hidden_state)
@@ -367,8 +514,10 @@ class RWKV7ForCausalLM(RWKV7Model, GenerationMixin):
         input_ids=None, 
         attention_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
-        use_cache: bool = True,
+        past_key_values: Optional[Cache] = None,
         rwkv_state: Optional[list[tuple[torch.Tensor,torch.Tensor,torch.Tensor]]] = None,
+        use_cache: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
         # num_new_tokens_if_rwkv_state: int = 1, # Only triggers if given input_ids + rwkv_state
         num_logits_to_keep: Optional[int] = None,
         **kwargs
@@ -389,6 +538,11 @@ class RWKV7ForCausalLM(RWKV7Model, GenerationMixin):
             if input_ids is not None:
                 raise ValueError("You cannot specify both `inputs_ids` and `inputs_embeds` at the same time")
             model_inputs = {'inputs_embeds': inputs_embeds}
+
+            # Get input sizing
+            batch_size = inputs_embeds.shape[0]
+            # x_input_length = inputs_embeds.shape[1]
+
         else:
             # The `contiguous()` here is necessary to have a static stride during decoding. torchdynamo otherwise
             # recompiles graphs as the stride of the inputs is a guard.
@@ -396,10 +550,22 @@ class RWKV7ForCausalLM(RWKV7Model, GenerationMixin):
             # TODO: use `next_tokens` directly instead.
             model_inputs = {'input_ids': input_ids.contiguous()}
 
+            # Get input sizing
+            batch_size = input_ids.shape[0]
+            # x_input_length = input_ids.shape[1]
+
+        # ---
+
+        # Initialize the cache if needed
+        if use_cache and not isinstance(past_key_values, RWKV7State):
+            past_key_values = RWKV7State()
+            past_key_values.rwkv_state = self.get_init_state(batch_size=batch_size)
+
         if num_logits_to_keep is not None:
             model_inputs['num_logits_to_keep'] = num_logits_to_keep
 
         model_inputs.update({
+            'past_key_values': past_key_values,
             'rwkv_state': rwkv_state,
             'use_cache': use_cache,
             'attention_mask': attention_mask,
@@ -413,7 +579,7 @@ class RWKV7ForCausalLM(RWKV7Model, GenerationMixin):
         num_new_tokens: int = 1,
         **kwargs
     ) -> Dict[str, Any]:
-        # Overwritten -- this model uses `state`, but doesn't have a cache (`past_key_values`)
+        # Prefer the output rwkv_state, if provided
         rwkv_state = outputs.get("rwkv_state", None)
         input_ids = model_kwargs.get("input_ids", None)
         attention_mask = model_kwargs.get("attention_mask", None)
@@ -438,10 +604,13 @@ class RWKV7ForCausalLM(RWKV7Model, GenerationMixin):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,  # noqa
+        position_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Cache] = None,
         rwkv_state: Optional[list[tuple[torch.Tensor,torch.Tensor,torch.Tensor]]] = None,
         use_cache: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -456,8 +625,17 @@ class RWKV7ForCausalLM(RWKV7Model, GenerationMixin):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         rwkv_outputs = RWKV7Model.forward(
-            self, input_ids, attention_mask, inputs_embeds, 
-            rwkv_state, use_cache, output_attentions, output_hidden_states,
+            self, 
+            input_ids=input_ids, 
+            attention_mask=attention_mask, 
+            position_ids=position_ids,
+            inputs_embeds=inputs_embeds, 
+            past_key_values=past_key_values, 
+            rwkv_state=rwkv_state, 
+            use_cache=use_cache, 
+            cache_position=cache_position,
+            output_attentions=output_attentions, 
+            output_hidden_states=output_hidden_states,
             return_dict=False
         )
 
