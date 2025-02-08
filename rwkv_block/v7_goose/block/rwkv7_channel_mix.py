@@ -51,9 +51,6 @@ class RWKV7ChannelMix(torch.nn.Module):
         device = configMap.get_device(None)
         dtype = configMap.get_dtype('bfloat16')
 
-        # By default, hidden_size_ffn = hidden_size * 4
-        hidden_size_ffn = configMap.get_hidden_size_ffn() 
-        
         # Reset the various params
         # ---
         with torch.no_grad():  # fancy init of time_mix

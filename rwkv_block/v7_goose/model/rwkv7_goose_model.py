@@ -67,21 +67,25 @@ class RWKV7GooseModel(nn.Module):
             self.blocks[i].reset_parameters()
 
         # Reinit the Embedding layer
-        self.emb = nn.Embedding(vocab_size, hidden_size, device=device, dtype=dtype)
+        self.emb.reset_parameters()
 
         # Reinit the  ln_out and head
-        self.ln_out = nn.LayerNorm(hidden_size, device=device, dtype=dtype)
+        self.ln_out.reset_parameters()
         if self.head is not None:
-            self.head = nn.Linear(hidden_size, vocab_size, bias=False, device=device, dtype=dtype)
+            self.head.reset_parameters()
 
         # Reinit the init state tuning support
         if configMap.init_state_wkv:
-            stateTuneList = [None]*num_hidden_layers
-            for i in range(num_hidden_layers):
-                stateTuneList[i] = nn.ParameterDict({
-                    "wkv": nn.Parameter(torch.zeros(hidden_size // 64, 64, 64, device=device, dtype=torch.float)),
-                })
-            self.init_state = nn.ParameterList(stateTuneList)
+            if self.init_state is None:
+                stateTuneList = [None]*num_hidden_layers
+                for i in range(num_hidden_layers):
+                    stateTuneList[i] = nn.ParameterDict({
+                        "wkv": nn.Parameter(torch.zeros(hidden_size // 64, 64, 64, device=device, dtype=torch.float)),
+                    })
+                self.init_state = nn.ParameterList(stateTuneList)
+            else:
+                for i in range(num_hidden_layers):
+                    self.init_state[i]["wkv"].data.copy_(torch.zeros(hidden_size // 64, 64, 64, device=device, dtype=torch.float))
 
     def load_from_model_state_dict(self, state_dict: dict, non_blocking:bool=True):
         '''
