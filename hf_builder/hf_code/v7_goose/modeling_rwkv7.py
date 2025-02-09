@@ -11,7 +11,7 @@ from transformers.utils import (
     logging,
 )
 from transformers.generation import GenerationMixin
-from transformers.modeling_outputs import ModelOutput
+from transformers.modeling_outputs import ModelOutput, CausalLMOutputWithPast
 from transformers.cache_utils import Cache
 
 import torch, math
@@ -140,6 +140,7 @@ class RWKV7PreTrainedModel(PreTrainedModel):
     _supports_cache_class = True
     _supports_quantized_cache = False
     _supports_static_cache = False
+    _skip_keys_device_placement = "past_key_values"
 
     # Enable gradient checkpointing by default
     supports_gradient_checkpointing = True
@@ -216,6 +217,7 @@ class RWKV7Output(ModelOutput):
     rwkv_state: Optional[list[tuple[torch.Tensor,torch.Tensor,torch.Tensor]]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
+    past_key_values: Optional[RWKV7State] = None
 
 
 @dataclass
@@ -244,6 +246,7 @@ class RWKV7CausalLMOutput(ModelOutput):
     rwkv_state: Optional[list[tuple[torch.Tensor,torch.Tensor,torch.Tensor]]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
+    past_key_values: Optional[RWKV7State] = None
 
 RWKV7_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
@@ -493,7 +496,8 @@ class RWKV7Model(RWKV7GooseModel, RWKV7PreTrainedModel):
             last_hidden_state=x_hidden_state,
             rwkv_state=rwkv_state,
             hidden_states=all_hidden_states,
-            attentions=all_attns
+            attentions=all_attns,
+            past_key_values=past_key_values
         )
 
 # @add_start_docstrings(
@@ -684,6 +688,7 @@ class RWKV7ForCausalLM(RWKV7Model, GenerationMixin):
             rwkv_state=rwkv_state,
             hidden_states=all_hidden_states,
             attentions=all_attns,
+            past_key_values=past_key_values
         )
 
 __all__ = ["RWKV7ForCausalLM", "RWKV7Model", "RWKV7PreTrainedModel"]
