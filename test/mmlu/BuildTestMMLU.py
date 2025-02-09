@@ -4,7 +4,7 @@ import concurrent.futures
 import os, math, torch
 
 def full_build_mmlu_test_dataset(
-    n_shot=5,
+    n_shot=0,
     # Tokenizer can be the AutoTokenizer instance
     # or a string, which is used to load the tokenizer
     tokenizer="neox",
@@ -260,7 +260,7 @@ def full_build_mmlu_test_dataset(
     return test_dataset_map
 
 def cache_build_mmlu_test_dataset(
-    n_shot=5,
+    n_shot=0,
     # Cachable test dataset, needs a tokenizer str
     tokenizer="neox",
     # Minimum right padding length
@@ -330,7 +330,7 @@ def cache_build_mmlu_test_dataset(
     return built_dataset
 
 def get_built_mmlu_test_dataset(
-    n_shot=5,
+    n_shot=0,
     # Cachable test dataset, needs a tokenizer str
     tokenizer="neox",
     # Minimum right padding length
@@ -364,7 +364,7 @@ if __name__ == "__main__":
     import argparse
     def main():
         parser = argparse.ArgumentParser(description="Build and cache MMLU test dataset")
-        parser.add_argument("--n_shot", type=int, default=5, help="Number of few-shot examples")
+        parser.add_argument("--n_shot", type=int, default=0, help="Number of few-shot examples")
         parser.add_argument("--tokenizer", type=str, default="neox", help="Tokenizer to use")
         parser.add_argument("--hf_model", type=str, default=None, help="Hugging Face model path to use for AutoTokenizer")
         parser.add_argument("--use_validation_set", action="store_true", help="Use validation set instead of test set")
