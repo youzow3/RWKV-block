@@ -583,8 +583,14 @@ class RWKV7ForCausalLM(RWKV7Model, GenerationMixin):
         num_new_tokens: int = 1,
         **kwargs
     ) -> Dict[str, Any]:
+        # Get the past_key_values from the outputs
+        past_key_values = outputs.get("past_key_values", None)
+        if past_key_values is not None:
+            rwkv_state = past_key_values.rwkv_state
+        else:
+            rwkv_state = outputs.get("rwkv_state", model_kwargs.get("rwkv_state", None))
+        
         # Prefer the output rwkv_state, if provided
-        rwkv_state = outputs.get("rwkv_state", None)
         input_ids = model_kwargs.get("input_ids", None)
         attention_mask = model_kwargs.get("attention_mask", None)
 
