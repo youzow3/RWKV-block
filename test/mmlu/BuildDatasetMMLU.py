@@ -2,7 +2,6 @@ from datasets import load_dataset
 from transformers import AutoTokenizer
 import concurrent.futures
 import os, math, torch
-import pickle
 
 def full_build_mmlu_test_dataset(
     n_shot=5,
@@ -254,6 +253,9 @@ def full_build_mmlu_test_dataset(
             test_dataset_map[subject] = updated_dataset
             print("## Dataset is padded for {} subject (n_shot={}): {}".format(test_set, n_shot,subject))
 
+    # Save the answer token IDs
+    test_dataset_map["_answer_token_id"] = torch.tensor(choice_tokens, dtype=torch.long)
+
     # Return the test dataset map
     return test_dataset_map
 
@@ -364,6 +366,7 @@ if __name__ == "__main__":
         parser = argparse.ArgumentParser(description="Build and cache MMLU test dataset")
         parser.add_argument("--n_shot", type=int, default=5, help="Number of few-shot examples")
         parser.add_argument("--tokenizer", type=str, default="neox", help="Tokenizer to use")
+        parser.add_argument("--hf_model", type=str, default=None, help="Hugging Face model path to use for AutoTokenizer")
         parser.add_argument("--use_validation_set", action="store_true", help="Use validation set instead of test set")
         parser.add_argument("--min_right_pad_tokens", type=int, default=0, help="Minimum right padding length")
         parser.add_argument("--prompt_chunk_size", type=int, default=16, help="Prompt chunk size in tokens")
@@ -371,13 +374,20 @@ if __name__ == "__main__":
 
         args = parser.parse_args()
 
+        tokenizer = args.tokenizer
+        if args.hf_model:
+            print("## Using HF model tokenizer:", args.hf_model)
+            tokenizer = AutoTokenizer.from_pretrained(args.hf_model, trust_remote_code=True)
+        else:
+            print("## Using tokenizer:", tokenizer)
+
         cache_build_mmlu_test_dataset(
             n_shot=args.n_shot,
-            tokenizer=args.tokenizer,
+            tokenizer=tokenizer,
             use_validation_set=args.use_validation_set,
             min_right_pad_tokens=args.min_right_pad_tokens,
             prompt_chunk_size=args.prompt_chunk_size,
             test_cache_dir=args.test_cache_dir if args.test_cache_dir != "-1" else -1
         )
-        print("## Done: Dataset been built and cached")
+        print("## Done: Dataset has been built and cached")
     main()
