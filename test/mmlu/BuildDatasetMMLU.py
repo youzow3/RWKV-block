@@ -10,9 +10,11 @@ def full_build_mmlu_test_dataset(
     # or a string, which is used to load the tokenizer
     tokenizer="neox",
     # Minimum right padding length
-    min_right_pad_length=16,
+    min_right_pad_tokens=0,
     # prompt chunk size (in tokens)
     prompt_chunk_size=16,
+    # Use validation set instead of test set
+    use_validation_set=False
 ):
     """
     Build the MMLU test dataset, with the given tokenizer and paddings
@@ -112,6 +114,16 @@ def full_build_mmlu_test_dataset(
         # "social_sciences",
     ]
 
+    # Set name to use (test or val)
+    if use_validation_set:
+        test_set = "validation"
+        subject_list = ["all"]
+    else:
+        test_set = "test"
+
+    # Subject threads
+    subject_threads = max( math.ceil(dataset_threads/len(subject_list)), 2 )
+
     # Fromat data sample, from question, and choices, and the answer
     def format_datasample(datasample, include_answer=True):
         res = "" + datasample["question"]
@@ -141,7 +153,7 @@ def full_build_mmlu_test_dataset(
             subject.replace("_", " ")
         )
 
-        print("## Building dataset for subject (n_shot={}): {} ...".format(n_shot,subject))
+        print("## Building dataset for {} subject (n_shot={}): {}".format(test_set, n_shot,subject))
 
         # Prepare the few shot example, if needed
         prompt_prefix += get_fewshot_examples(subject)
@@ -159,8 +171,8 @@ def full_build_mmlu_test_dataset(
             }
 
         # Build the dataset
-        test_dataset = load_dataset(hf_dataset_name, subject, split="test")
-        formatted_dataset = test_dataset.map(dataset_formatter, batched=False, num_proc=2)
+        test_dataset = load_dataset(hf_dataset_name, subject, split=test_set)
+        formatted_dataset = test_dataset.map(dataset_formatter, batched=False, num_proc=subject_threads)
 
         # Get the longest prompt length
         subject_longest_prompt_length = 0
@@ -178,13 +190,13 @@ def full_build_mmlu_test_dataset(
             subject, processed_dataset, subject_longest_prompt_length = future.result()
             test_dataset_map[subject] = processed_dataset
             longest_prompt_length = max(longest_prompt_length, subject_longest_prompt_length)
-            print("## Dataset is ready for subject (n_shot={}): {}".format(n_shot,subject))
+            print("## Dataset is ready for {} subject (n_shot={}): {}".format(test_set, n_shot,subject))
 
     # Longest prompt token length
     print("## Longest prompt token length:", longest_prompt_length)
 
     # Calculate the target prompt+padding length
-    target_prompt_length = longest_prompt_length + min_right_pad_length
+    target_prompt_length = longest_prompt_length + min_right_pad_tokens
     target_prompt_length = math.ceil(target_prompt_length / prompt_chunk_size) * prompt_chunk_size
     print("## Padding to target prompt length:", target_prompt_length)
 
@@ -217,7 +229,7 @@ def full_build_mmlu_test_dataset(
 
     def pad_and_finalize_subject(subject):
         # Pad the prompt
-        padded_dataset = test_dataset_map[subject].map(pad_datasample, batched=False, num_proc=2)
+        padded_dataset = test_dataset_map[subject].map(pad_datasample, batched=False, num_proc=subject_threads)
 
         # Finalize the dataset, as a single tensor per subject
         dataset_length = len(padded_dataset)
@@ -240,7 +252,7 @@ def full_build_mmlu_test_dataset(
         for future in concurrent.futures.as_completed(futures):
             subject, updated_dataset = future.result()
             test_dataset_map[subject] = updated_dataset
-            print("## Dataset is padded for subject (n_shot={}): {}".format(n_shot,subject))
+            print("## Dataset is padded for {} subject (n_shot={}): {}".format(test_set, n_shot,subject))
 
     # Return the test dataset map
     return test_dataset_map
@@ -250,11 +262,17 @@ def cache_build_mmlu_test_dataset(
     # Cachable test dataset, needs a tokenizer str
     tokenizer="neox",
     # Minimum right padding length
-    min_right_pad_length=16,
+    # of blank tokens, to the right
+    min_right_pad_tokens=0,
     # prompt chunk size (in tokens)
+    # to round up in chunks of
     prompt_chunk_size=16,
     # Cache directory
     test_cache_dir=-1,
+    # Use validation set instead of test set
+    use_validation_set=False,
+    # Read only from cache (no build)
+    read_only_cache=False
 ):
     """
     Build the MMLU test dataset, with the given tokenizer and paddings
@@ -267,9 +285,12 @@ def cache_build_mmlu_test_dataset(
     else:
         tokenizer_str = tokenizer
     
+    # Set name to use (test or val)
+    test_set = "val" if use_validation_set else "test"
+
     # Build the cache key
     format_revision = 0
-    cache_key = f"mmlu-t_{tokenizer_str}-n_{n_shot}-p_{min_right_pad_length}-c_{prompt_chunk_size}-r{format_revision}.pth"
+    cache_key = f"mmlu-{test_set}-t_{tokenizer_str}-n_{n_shot}-p_{min_right_pad_tokens}-c_{prompt_chunk_size}-r{format_revision}.pth"
 
     # Use the __file__/.mmlu_cache as the cache directory
     if test_cache_dir == -1:
@@ -278,21 +299,26 @@ def cache_build_mmlu_test_dataset(
     # Check if the cache exists
     cache_path = os.path.join(test_cache_dir, cache_key)
     if os.path.exists(cache_path):
-        print("## Loading MMLU cached dataset:", cache_path)
+        print(f"## Loading MMLU cached dataset (n_shot={n_shot},tokenizer={tokenizer_str}):", cache_path)
         return torch.load(cache_path, weights_only=True, mmap=True, map_location="cpu")
         # with open(cache_path, "rb") as f:
         #     return pickle.load(f)
     
+    # If read only cache, return None
+    if read_only_cache:
+        return None
+
     # Build the dataset
     built_dataset = full_build_mmlu_test_dataset(
         n_shot=n_shot,
         tokenizer=tokenizer,
-        min_right_pad_length=min_right_pad_length,
+        min_right_pad_tokens=min_right_pad_tokens,
         prompt_chunk_size=prompt_chunk_size,
+        use_validation_set=use_validation_set
     )
 
     # Save the dataset
-    print("## Saving MMLU dataset cache:", cache_path)
+    print(f"## Saving MMLU dataset cache (n_shot={n_shot},tokenizer={tokenizer_str}):", cache_path)
     os.makedirs(test_cache_dir, exist_ok=True)
     torch.save(built_dataset, cache_path)
     # with open(cache_path, "wb") as f:
@@ -301,6 +327,57 @@ def cache_build_mmlu_test_dataset(
     # Return the dataset
     return built_dataset
 
-# Debugging run
+def get_built_mmlu_test_dataset(
+    n_shot=5,
+    # Cachable test dataset, needs a tokenizer str
+    tokenizer="neox",
+    # Minimum right padding length
+    # of blank tokens, to the right
+    min_right_pad_tokens=0,
+    # prompt chunk size (in tokens)
+    # to round up in chunks of
+    prompt_chunk_size=16,
+    # Cache directory
+    test_cache_dir=-1,
+    # Use validation set instead of test set
+    use_validation_set=False
+):
+    # Get the cached dataset, if its built, or throw an error with the CLI command
+    ret = cache_build_mmlu_test_dataset(
+        n_shot=n_shot,
+        tokenizer=tokenizer,
+        min_right_pad_tokens=min_right_pad_tokens,
+        prompt_chunk_size=prompt_chunk_size,
+        test_cache_dir=test_cache_dir,
+        use_validation_set=use_validation_set,
+        read_only_cache=True
+    )
+    if ret is None:
+        print("## MMLU test dataset not built, run the following command to build it:")
+        print(f"python {__file__} --n_shot {n_shot} --tokenizer {tokenizer} --use_validation_set {use_validation_set} --min_right_pad_tokens {min_right_pad_tokens} --prompt_chunk_size {prompt_chunk_size}")
+        raise RuntimeError("MMLU test dataset not built")
+    return ret
+
 if __name__ == "__main__":
-    cache_build_mmlu_test_dataset()
+    import argparse
+    def main():
+        parser = argparse.ArgumentParser(description="Build and cache MMLU test dataset")
+        parser.add_argument("--n_shot", type=int, default=5, help="Number of few-shot examples")
+        parser.add_argument("--tokenizer", type=str, default="neox", help="Tokenizer to use")
+        parser.add_argument("--use_validation_set", action="store_true", help="Use validation set instead of test set")
+        parser.add_argument("--min_right_pad_tokens", type=int, default=0, help="Minimum right padding length")
+        parser.add_argument("--prompt_chunk_size", type=int, default=16, help="Prompt chunk size in tokens")
+        parser.add_argument("--test_cache_dir", type=str, default="-1", help="Cache directory (default to `__dirname__/.mmlu_cache`)")
+
+        args = parser.parse_args()
+
+        cache_build_mmlu_test_dataset(
+            n_shot=args.n_shot,
+            tokenizer=args.tokenizer,
+            use_validation_set=args.use_validation_set,
+            min_right_pad_tokens=args.min_right_pad_tokens,
+            prompt_chunk_size=args.prompt_chunk_size,
+            test_cache_dir=args.test_cache_dir if args.test_cache_dir != "-1" else -1
+        )
+        print("## Done: Dataset been built and cached")
+    main()
