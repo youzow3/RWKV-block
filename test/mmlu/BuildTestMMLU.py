@@ -1,4 +1,5 @@
 from datasets import load_dataset
+import datasets
 from transformers import AutoTokenizer
 import concurrent.futures
 import os, math, torch
@@ -18,22 +19,37 @@ def full_build_mmlu_test_dataset(
     """
     Build the MMLU test dataset, with the given tokenizer and paddings
     """
+    # Single processing mode (avoid some known issues, with world tokenizer)
+    single_process_mode = False
+
     # Build the tokenizer
     tokenizer_str = None
     if isinstance(tokenizer, str):
         if tokenizer == "world":
             tokenizer_str = "world"
             tokenizer = AutoTokenizer.from_pretrained("RWKV/v6-Finch-1B6-HF", trust_remote_code=True)
+            single_process_mode = True
         elif tokenizer == "neox":
             tokenizer_str = "neox"
             tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neox-20b")
         else:
             tokenizer = AutoTokenizer.from_pretrained(tokenizer)
 
+    # Aliasing tokenizer class name to short str
+    if tokenizer.__class__.__name__ == "GPTNeoXTokenizerFast":
+        tokenizer_str = "neox"
+    elif tokenizer.__class__.__name__ == "RwkvTokenizer":
+        tokenizer_str = "world"
+        single_process_mode = True
+
+    ## HOTFIX: Set single process mode, for much better dataset building reliability
+    ## the minimal time saving is not substential enough to justify tracing and fixing the issues
+    single_process_mode = True
+
     # Check if its based on AutoTokenizer
     if tokenizer is None:
         raise ValueError("Tokenizer shuld be an instance of AutoTokenizer or a string (which is used to load the AutoTokenizer).")
-
+    
     # HF dataset to use
     hf_dataset_name = "cais/mmlu"
 
@@ -45,7 +61,7 @@ def full_build_mmlu_test_dataset(
 
     # Choice letters
     choice_letters = ["A", "B", "C", "D"]
-    choice_tokens = [tokenizer.encode(letter, return_tensors="pt")[0][0] for letter in choice_letters]
+    choice_tokens = [tokenizer.encode(letter, return_tensors="pt", padding=False)[0][0] for letter in choice_letters]
 
     # The list of dataset subset
     subject_list = [
@@ -122,6 +138,22 @@ def full_build_mmlu_test_dataset(
 
     # Subject threads
     subject_threads = max( math.ceil(dataset_threads/len(subject_list)), 2 )
+    if single_process_mode:
+        subject_threads = 1
+
+    # Build the cache key
+    format_revision = 0
+    cache_key = f"mmlu-{test_set}-t_{tokenizer_str}-n_{n_shot}-p_{min_right_pad_tokens}-c_{prompt_chunk_size}-r{format_revision}"
+
+    # Hash of the current file
+    script_file_path = __file__
+    script_file_content = open(script_file_path, "rb").read()
+    script_file_hash = hash(script_file_content)
+
+    # Disable progress bars, as they are noisy in logs
+    datasets.disable_progress_bars()
+    # # Disable caching as it has known issues
+    # datasets.disable_caching()
 
     # Fromat data sample, from question, and choices, and the answer
     def format_datasample(datasample, include_answer=True):
@@ -161,7 +193,7 @@ def full_build_mmlu_test_dataset(
         def dataset_formatter(datasample):
             prompt = prompt_prefix + format_datasample(datasample, include_answer=False)
 
-            prompt_input_ids = tokenizer.encode(prompt, return_tensors="pt")[0].to("cpu")
+            prompt_input_ids = tokenizer.encode(prompt, return_tensors="pt", padding=False)[0].to("cpu")
             prompt_length = prompt_input_ids.shape[0]
             return {
                 "prompt": prompt_input_ids,
@@ -171,7 +203,7 @@ def full_build_mmlu_test_dataset(
 
         # Build the dataset
         test_dataset = load_dataset(hf_dataset_name, subject, split=test_set)
-        formatted_dataset = test_dataset.map(dataset_formatter, batched=False, num_proc=subject_threads)
+        formatted_dataset = test_dataset.map(dataset_formatter, batched=False, num_proc=subject_threads, new_fingerprint=str(hash(f"{script_file_hash}-{cache_key}-{subject}-formatter")))
 
         # Get the longest prompt length
         subject_longest_prompt_length = 0
@@ -183,13 +215,20 @@ def full_build_mmlu_test_dataset(
 
     # Process the subjects, in parallel
     longest_prompt_length = 0
-    with concurrent.futures.ThreadPoolExecutor(max_workers=dataset_threads) as executor:
-        futures = {executor.submit(process_subject, subject): subject for subject in subject_list}
-        for future in concurrent.futures.as_completed(futures):
-            subject, processed_dataset, subject_longest_prompt_length = future.result()
+    if single_process_mode:
+        for subject in subject_list:
+            subject, processed_dataset, subject_longest_prompt_length = process_subject(subject)
             test_dataset_map[subject] = processed_dataset
             longest_prompt_length = max(longest_prompt_length, subject_longest_prompt_length)
             print("## Dataset is ready for {} subject (n_shot={}): {}".format(test_set, n_shot,subject))
+    else:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=dataset_threads) as executor:
+            futures = {executor.submit(process_subject, subject): subject for subject in subject_list}
+            for future in concurrent.futures.as_completed(futures):
+                subject, processed_dataset, subject_longest_prompt_length = future.result()
+                test_dataset_map[subject] = processed_dataset
+                longest_prompt_length = max(longest_prompt_length, subject_longest_prompt_length)
+                print("## Dataset is ready for {} subject (n_shot={}): {}".format(test_set, n_shot,subject))
 
     # Longest prompt token length
     print("## Longest prompt token length:", longest_prompt_length)
@@ -228,7 +267,7 @@ def full_build_mmlu_test_dataset(
 
     def pad_and_finalize_subject(subject):
         # Pad the prompt
-        padded_dataset = test_dataset_map[subject].map(pad_datasample, batched=False, num_proc=subject_threads)
+        padded_dataset = test_dataset_map[subject].map(pad_datasample, batched=False, num_proc=subject_threads, new_fingerprint=str(hash(f"{script_file_hash}-{cache_key}-{subject}-pad-n-finalize")))
 
         # Finalize the dataset, as a single tensor per subject
         dataset_length = len(padded_dataset)
@@ -246,12 +285,18 @@ def full_build_mmlu_test_dataset(
         return subject, final_dataset
 
     # Pad the subjects in parallel
-    with concurrent.futures.ThreadPoolExecutor(max_workers=dataset_threads) as executor:
-        futures = {executor.submit(pad_and_finalize_subject, subject): subject for subject in subject_list}
-        for future in concurrent.futures.as_completed(futures):
-            subject, updated_dataset = future.result()
+    if single_process_mode:
+        for subject in subject_list:
+            subject, updated_dataset = pad_and_finalize_subject(subject)
             test_dataset_map[subject] = updated_dataset
             print("## Dataset is padded for {} subject (n_shot={}): {}".format(test_set, n_shot,subject))
+    else:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=dataset_threads) as executor:
+            futures = {executor.submit(pad_and_finalize_subject, subject): subject for subject in subject_list}
+            for future in concurrent.futures.as_completed(futures):
+                subject, updated_dataset = future.result()
+                test_dataset_map[subject] = updated_dataset
+                print("## Dataset is padded for {} subject (n_shot={}): {}".format(test_set, n_shot,subject))
 
     # Save the answer token IDs
     test_dataset_map["_answer_token_id"] = torch.tensor(choice_tokens, dtype=torch.long)
@@ -284,6 +329,12 @@ def cache_build_mmlu_test_dataset(
     # Tokenizer class name is used if not a string
     if not isinstance(tokenizer, str):
         tokenizer_str = tokenizer.__class__.__name__
+
+        # Aliasing tokenizer class name to short str
+        if tokenizer.__class__.__name__ == "GPTNeoXTokenizerFast":
+            tokenizer_str = "neox"
+        elif tokenizer.__class__.__name__ == "RwkvTokenizer":
+            tokenizer_str = "world"
     else:
         tokenizer_str = tokenizer
     
@@ -305,6 +356,8 @@ def cache_build_mmlu_test_dataset(
         return torch.load(cache_path, weights_only=True, mmap=True, map_location="cpu")
         # with open(cache_path, "rb") as f:
         #     return pickle.load(f)
+    else:
+        print(f"## Building MMLU cached dataset (n_shot={n_shot},tokenizer={tokenizer_str}):", cache_path)
     
     # If read only cache, return None
     if read_only_cache:

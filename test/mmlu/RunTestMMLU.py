@@ -42,14 +42,15 @@ def mmlu_test_runner(
 
     # Loop through the subjects
     for subject in subject_keys:
-        # Log the subject
-        print(f"### Running MMLU test : {subject} ...")
-
         # Get the subject data
         subject_data = mmlu_dataset[subject]
 
         # Get the number of batches
-        num_batches = math.ceil(len(subject_data) / batch_size)
+        subject_data_count = subject_data["prompt_id"].shape[0]
+        num_batches = math.ceil(subject_data_count / batch_size)
+
+        # Log the subject
+        print(f"### Running MMLU test : {subject} (count={subject_data_count}, batches={num_batches}) ...")
 
         # list of answer softmax probability of the correct answer
         # list of answer match, after argmax (1 if correct, 0 if incorrect)
@@ -58,12 +59,9 @@ def mmlu_test_runner(
 
         # Loop through the batches
         for batch_index in range(num_batches):
-            # Number of samples
-            test_count = len(subject_data)
-
             # start and endin position
             start = batch_index * batch_size
-            endin = min(start + batch_size, test_count)
+            endin = min(start + batch_size, subject_data_count)
 
             # The data has be pre-tokenized, padded, and tensorized, as a giant tensor (Batch,Seq)
             prompt_id = subject_data["prompt_id"][start:endin]
@@ -90,7 +88,10 @@ def mmlu_test_runner(
                 # Append the answer probability
                 answer_prob_list.append(answer_prob[answer_id[i]].item())
                 # Append the answer match
-                answer_match_list.append(int(torch.argmax(answer_logits) == answer_token_id[i]))
+                if (int(torch.argmax(answer_prob).item()) == int(answer_id[i].item())):
+                    answer_match_list.append(1)
+                else:
+                    answer_match_list.append(0)
     
         # Calculate the MMLU score for the subject
         answer_accuracy = sum(answer_match_list) / len(answer_match_list)
@@ -117,7 +118,9 @@ def mmlu_test_runner(
         "probability": overall_probability
     }
     # Log the overall result
+    print("------------------------------------------------")
     print(f"### MMLU overall test result : accuracy={overall_accuracy:.4f} , probability={overall_probability:.4f}")
+    print("------------------------------------------------")
 
 if __name__ == "__main__":
     
@@ -139,7 +142,7 @@ if __name__ == "__main__":
         print("------------------------------------------------")
         print("## Loading HF model:", args.hf_model)
         tokenizer = AutoTokenizer.from_pretrained(args.hf_model, trust_remote_code=True)
-        model = AutoModelForCausalLM.from_pretrained(args.hf_model, trust_remote_code=True).to(args.device)
+        model = AutoModelForCausalLM.from_pretrained(args.hf_model, trust_remote_code=True, tmix_backend=args.tmix_backend, device=args.device).to(args.device)
 
         print("------------------------------------------------")
         print("## Preparing the dataset")
@@ -163,5 +166,5 @@ if __name__ == "__main__":
             batch_size=args.batch_size,
             mmlu_dataset=mmlu_dataset
         )
-        print("------------------------------------------------")
+        
     main()
