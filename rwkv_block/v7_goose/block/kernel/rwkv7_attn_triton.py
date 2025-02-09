@@ -27,6 +27,9 @@ def IND5(a,b,c,d,e,nb,nc,nd,ne):
 @triton.jit
 def _prod(a,b): return a*b
 
+@triton.jit
+def _sum(a,b): return a+b
+
 # inv(I-A) where A is a strictly lower triangular nxn matrix
 @triton.jit
 def tri_minv(A, n:tl.constexpr, prec:tl.constexpr):
@@ -67,10 +70,15 @@ def fw_attn_triton(w_,q_,k_,v_,a_,b_, s0_,y_,s_,sT_, B:tl.constexpr,T:tl.constex
         sa = tl.load(a_+IND4(bi,t,hi,i, T,H,C)).to(tl.float32)
         sb = tl.load(b_+IND4(bi,t,hi,i, T,H,C)).to(tl.float32)
 
-        w = (-sw.exp()).exp()
-        fw = tl.reduce(w, 0, _prod, keep_dims=True)
-        incl_pref = tl.cumprod(w,axis=0)
-        non_incl_pref = incl_pref / w
+        # w = (-sw.exp()).exp()
+        # fw = tl.reduce(w, 0, _prod, keep_dims=True)
+        # incl_pref = tl.cumprod(w,axis=0)
+        # non_incl_pref = incl_pref / w
+        # inv_incl_pref = 1 / incl_pref
+        w = (-sw.exp())
+        fw = tl.reduce(w, 0, _sum, keep_dims=True).exp()
+        incl_pref = tl.cumsum(w,axis=0).exp()
+        non_incl_pref = incl_pref / w.exp()
         inv_incl_pref = 1 / incl_pref
 
         wq = sq * incl_pref
@@ -234,10 +242,15 @@ def fw_attn_triton_bighead(w_,q_,k_,v_,a_,b_, s0_,y_,s_,sT_, wq_,wa_,kwi_,bwi_,f
             sa = tl.load(a_+IND4(bi,t,hi,j, T,H,C)).to(tl.float32)
             sb = tl.load(b_+IND4(bi,t,hi,j, T,H,C)).to(tl.float32)
 
-            w = (-sw.exp()).exp()
-            fw = tl.reduce(w, 0, _prod, keep_dims=True)
-            incl_pref = tl.cumprod(w,axis=0)
-            non_incl_pref = incl_pref / w
+            # w = (-sw.exp()).exp()
+            # fw = tl.reduce(w, 0, _prod, keep_dims=True)
+            # incl_pref = tl.cumprod(w,axis=0)
+            # non_incl_pref = incl_pref / w
+            # inv_incl_pref = 1 / incl_pref
+            w = (-sw.exp())
+            fw = tl.reduce(w, 0, _sum, keep_dims=True).exp()
+            incl_pref = tl.cumsum(w,axis=0).exp()
+            non_incl_pref = incl_pref / w.exp()
             inv_incl_pref = 1 / incl_pref
 
             wq = sq * incl_pref
@@ -341,10 +354,15 @@ def bw_attn_triton_bighead(w_,q_,k_,v_,a_,b_, dy_,s_,dsT_,ds_, dw_,dq_,dk_,dv_,d
             sa = tl.load(a_+IND4(bi,t,hi,j, T,H,C)).to(tl.float32)
             sb = tl.load(b_+IND4(bi,t,hi,j, T,H,C)).to(tl.float32)
 
-            w = (-sw.exp()).exp()
-            fw = tl.reduce(w, 0, _prod, keep_dims=True)
-            incl_pref = tl.cumprod(w,axis=0)
-            non_incl_pref = incl_pref / w
+            # w = (-sw.exp()).exp()
+            # fw = tl.reduce(w, 0, _prod, keep_dims=True)
+            # incl_pref = tl.cumprod(w,axis=0)
+            # non_incl_pref = incl_pref / w
+            # inv_incl_pref = 1 / incl_pref
+            w = (-sw.exp())
+            fw = tl.reduce(w, 0, _sum, keep_dims=True).exp()
+            incl_pref = tl.cumsum(w,axis=0).exp()
+            non_incl_pref = incl_pref / w.exp()
             inv_incl_pref = 1 / incl_pref
 
             wq = sq * incl_pref
@@ -471,9 +489,15 @@ def bw_attn_triton_bighead(w_,q_,k_,v_,a_,b_, dy_,s_,dsT_,ds_, dw_,dq_,dk_,dv_,d
                     tl.store(ds0_+IND4(bi,hi,i.trans(),j, H,C,C), dstate.to(tl.bfloat16))
 
             sw = tl.load(w_+IND4(bi,t,hi,j, T,H,C)).to(tl.float32)
-            w = (-sw.exp()).exp()
-            incl_pref = tl.cumprod(w,axis=0)
-            non_incl_pref = incl_pref / w
+
+            # w = (-sw.exp()).exp()
+            # incl_pref = tl.cumprod(w,axis=0)
+            # non_incl_pref = incl_pref / w
+            # inv_incl_pref = 1 / incl_pref
+            w = (-sw.exp())
+            # fw = tl.reduce(w, 0, _sum, keep_dims=True).exp()
+            incl_pref = tl.cumsum(w,axis=0).exp()
+            non_incl_pref = incl_pref / w.exp()
             inv_incl_pref = 1 / incl_pref
 
             bwi = tl.load(bwi_+IND4(bi,hi,dt,j, H,dT,C)).to(tl.float32)
