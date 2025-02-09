@@ -1,0 +1,306 @@
+from datasets import load_dataset
+from transformers import AutoTokenizer
+import concurrent.futures
+import os, math, torch
+import pickle
+
+def full_build_mmlu_test_dataset(
+    n_shot=5,
+    # Tokenizer can be the AutoTokenizer instance
+    # or a string, which is used to load the tokenizer
+    tokenizer="neox",
+    # Minimum right padding length
+    min_right_pad_length=16,
+    # prompt chunk size (in tokens)
+    prompt_chunk_size=16,
+):
+    """
+    Build the MMLU test dataset, with the given tokenizer and paddings
+    """
+    # Build the tokenizer
+    tokenizer_str = None
+    if isinstance(tokenizer, str):
+        if tokenizer == "world":
+            tokenizer_str = "world"
+            tokenizer = AutoTokenizer.from_pretrained("RWKV/v6-Finch-1B6-HF", trust_remote_code=True)
+        elif tokenizer == "neox":
+            tokenizer_str = "neox"
+            tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-neox-20b")
+        else:
+            tokenizer = AutoTokenizer.from_pretrained(tokenizer)
+
+    # Check if its based on AutoTokenizer
+    if tokenizer is None:
+        raise ValueError("Tokenizer shuld be an instance of AutoTokenizer or a string (which is used to load the AutoTokenizer).")
+
+    # HF dataset to use
+    hf_dataset_name = "cais/mmlu"
+
+    # Dataset threads to use
+    dataset_threads = max(int(os.cpu_count()), 1)
+
+    # test dataset map
+    test_dataset_map = {}
+
+    # Choice letters
+    choice_letters = ["A", "B", "C", "D"]
+    choice_tokens = [tokenizer.encode(letter, return_tensors="pt")[0][0] for letter in choice_letters]
+
+    # The list of dataset subset
+    subject_list = [
+        "abstract_algebra",
+        "anatomy",
+        "astronomy",
+        "business_ethics",
+        "clinical_knowledge",
+        "college_medicine",
+        "college_biology",
+        "college_chemistry",
+        "college_computer_science",
+        "college_mathematics",
+        "college_physics",
+        "computer_security",
+        "conceptual_physics",
+        "econometrics",
+        "elementary_mathematics",
+        "electrical_engineering",
+        "formal_logic",
+        "global_facts",
+        "high_school_european_history",
+        "high_school_us_history",
+        "high_school_world_history",
+        "high_school_geography",
+        "high_school_government_and_politics",
+        "high_school_macroeconomics",
+        "high_school_microeconomics",
+        "high_school_psychology",
+        "high_school_biology",
+        "high_school_chemistry",
+        "high_school_computer_science",
+        "high_school_mathematics",
+        "high_school_physics",
+        "high_school_statistics",
+        "human_aging",
+        "human_sexuality",
+        "international_law",
+        "jurisprudence",
+        "logical_fallacies",
+        "machine_learning",
+        "management",
+        "marketing",
+        "medical_genetics",
+        "miscellaneous",
+        "moral_disputes",
+        "moral_scenarios",
+        "nutrition",
+        "philosophy",
+        "prehistory",
+        "professional_law",
+        "professional_accounting",
+        "professional_psychology",
+        "professional_medicine",
+        "public_relations",
+        "security_studies",
+        "sociology",
+        "us_foreign_policy",
+        "virology",
+        "world_religions",
+        # ---
+        # "humanities",
+        # "other",
+        # "stem",
+        # "social_sciences",
+    ]
+
+    # Fromat data sample, from question, and choices, and the answer
+    def format_datasample(datasample, include_answer=True):
+        res = "" + datasample["question"]
+        for i, choice in enumerate(datasample["choices"]):
+            res += f"\n{choice_letters[i]}. {choice}"
+        res += "\nAnswer: "
+        if include_answer:
+            res += f"{choice_letters[datasample["answer"]]}\n\n"
+        return res
+
+    # Get the few shot prompt prefix
+    def get_fewshot_examples(subject):
+        if n_shot == 0:
+            return ""
+        
+        # Dev dataset is apperantly used for few shot 
+        dev_dataset = load_dataset(hf_dataset_name, subject, split="dev")
+
+        # Build and return the prompt
+        ret_prompt = ""
+        for i in range(n_shot):
+            ret_prompt += format_datasample(dev_dataset[i], include_answer=True)
+        return ret_prompt
+
+    def process_subject(subject):
+        prompt_prefix = "The following are multiple choice questions (with answers) about {}.\n\n".format(
+            subject.replace("_", " ")
+        )
+
+        print("## Building dataset for subject (n_shot={}): {} ...".format(n_shot,subject))
+
+        # Prepare the few shot example, if needed
+        prompt_prefix += get_fewshot_examples(subject)
+
+        # dataset_formatter
+        def dataset_formatter(datasample):
+            prompt = prompt_prefix + format_datasample(datasample, include_answer=False)
+
+            prompt_input_ids = tokenizer.encode(prompt, return_tensors="pt")[0].to("cpu")
+            prompt_length = prompt_input_ids.shape[0]
+            return {
+                "prompt": prompt_input_ids,
+                "prompt_length": prompt_length,
+                "answer": datasample["answer"]
+            }
+
+        # Build the dataset
+        test_dataset = load_dataset(hf_dataset_name, subject, split="test")
+        formatted_dataset = test_dataset.map(dataset_formatter, batched=False, num_proc=2)
+
+        # Get the longest prompt length
+        subject_longest_prompt_length = 0
+        for i in range(len(formatted_dataset)):
+            subject_longest_prompt_length = max(subject_longest_prompt_length, formatted_dataset[i]["prompt_length"])
+
+        # Return the subject, and the formatted dataset, and the longest prompt length
+        return subject, formatted_dataset, subject_longest_prompt_length
+
+    # Process the subjects, in parallel
+    longest_prompt_length = 0
+    with concurrent.futures.ThreadPoolExecutor(max_workers=dataset_threads) as executor:
+        futures = {executor.submit(process_subject, subject): subject for subject in subject_list}
+        for future in concurrent.futures.as_completed(futures):
+            subject, processed_dataset, subject_longest_prompt_length = future.result()
+            test_dataset_map[subject] = processed_dataset
+            longest_prompt_length = max(longest_prompt_length, subject_longest_prompt_length)
+            print("## Dataset is ready for subject (n_shot={}): {}".format(n_shot,subject))
+
+    # Longest prompt token length
+    print("## Longest prompt token length:", longest_prompt_length)
+
+    # Calculate the target prompt+padding length
+    target_prompt_length = longest_prompt_length + min_right_pad_length
+    target_prompt_length = math.ceil(target_prompt_length / prompt_chunk_size) * prompt_chunk_size
+    print("## Padding to target prompt length:", target_prompt_length)
+
+    # Pad the prompt
+    def pad_prompt_tokens(prompt):
+        # If prompt is a list, convert it to tensor
+        if isinstance(prompt, list):
+            prompt = torch.tensor(prompt, dtype=torch.long, device="cpu")
+
+        # Skip if prompt is already padded
+        if prompt.shape[0] >= target_prompt_length:
+            return prompt
+        
+        # Pad the prompt 
+        return torch.cat(
+            [
+                prompt,
+                torch.zeros(target_prompt_length - prompt.shape[0], dtype=prompt.dtype, device="cpu"),
+            ],
+            dim=0,
+        )
+
+    # Format the datasample
+    def pad_datasample(datasample):
+        return {
+            "prompt": pad_prompt_tokens(datasample["prompt"]), 
+            "prompt_length": datasample["prompt_length"],
+            "answer": datasample["answer"],
+        }
+
+    def pad_and_finalize_subject(subject):
+        # Pad the prompt
+        padded_dataset = test_dataset_map[subject].map(pad_datasample, batched=False, num_proc=2)
+
+        # Finalize the dataset, as a single tensor per subject
+        dataset_length = len(padded_dataset)
+        final_dataset = {
+            "prompt_id": torch.zeros(dataset_length, target_prompt_length, dtype=torch.long),
+            "prompt_length": torch.zeros(dataset_length, dtype=torch.long),
+            "answer_id": torch.zeros(dataset_length, dtype=torch.long),
+        }
+        for i in range(dataset_length):
+            final_dataset["prompt_id"][i] = torch.tensor(padded_dataset[i]["prompt"], dtype=torch.long)
+            final_dataset["answer_id"][i] = padded_dataset[i]["answer"]
+            final_dataset["prompt_length"][i] = padded_dataset[i]["prompt_length"]
+
+        # Return the subject, and the final dataset
+        return subject, final_dataset
+
+    # Pad the subjects in parallel
+    with concurrent.futures.ThreadPoolExecutor(max_workers=dataset_threads) as executor:
+        futures = {executor.submit(pad_and_finalize_subject, subject): subject for subject in subject_list}
+        for future in concurrent.futures.as_completed(futures):
+            subject, updated_dataset = future.result()
+            test_dataset_map[subject] = updated_dataset
+            print("## Dataset is padded for subject (n_shot={}): {}".format(n_shot,subject))
+
+    # Return the test dataset map
+    return test_dataset_map
+
+def cache_build_mmlu_test_dataset(
+    n_shot=5,
+    # Cachable test dataset, needs a tokenizer str
+    tokenizer="neox",
+    # Minimum right padding length
+    min_right_pad_length=16,
+    # prompt chunk size (in tokens)
+    prompt_chunk_size=16,
+    # Cache directory
+    test_cache_dir=-1,
+):
+    """
+    Build the MMLU test dataset, with the given tokenizer and paddings
+    And cache it, if possible
+    """
+
+    # Tokenizer class name is used if not a string
+    if not isinstance(tokenizer, str):
+        tokenizer_str = tokenizer.__class__.__name__
+    else:
+        tokenizer_str = tokenizer
+    
+    # Build the cache key
+    format_revision = 0
+    cache_key = f"mmlu-t_{tokenizer_str}-n_{n_shot}-p_{min_right_pad_length}-c_{prompt_chunk_size}-r{format_revision}.pth"
+
+    # Use the __file__/.mmlu_cache as the cache directory
+    if test_cache_dir == -1:
+        test_cache_dir = os.path.join(os.path.dirname(__file__), ".mmlu_cache")
+
+    # Check if the cache exists
+    cache_path = os.path.join(test_cache_dir, cache_key)
+    if os.path.exists(cache_path):
+        print("## Loading MMLU cached dataset:", cache_path)
+        return torch.load(cache_path, weights_only=True, mmap=True, map_location="cpu")
+        # with open(cache_path, "rb") as f:
+        #     return pickle.load(f)
+    
+    # Build the dataset
+    built_dataset = full_build_mmlu_test_dataset(
+        n_shot=n_shot,
+        tokenizer=tokenizer,
+        min_right_pad_length=min_right_pad_length,
+        prompt_chunk_size=prompt_chunk_size,
+    )
+
+    # Save the dataset
+    print("## Saving MMLU dataset cache:", cache_path)
+    os.makedirs(test_cache_dir, exist_ok=True)
+    torch.save(built_dataset, cache_path)
+    # with open(cache_path, "wb") as f:
+    #     pickle.dump(built_dataset, f)
+
+    # Return the dataset
+    return built_dataset
+
+# Debugging run
+if __name__ == "__main__":
+    cache_build_mmlu_test_dataset()
