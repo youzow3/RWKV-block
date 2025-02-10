@@ -203,7 +203,7 @@ class RWKV7TimeMix(torch.nn.Module):
 
             self.k_k.copy_(torch.ones(1,1,hidden_size_att, device=device, dtype=dtype)*0.85)
             self.k_a.copy_(torch.ones(1,1,hidden_size_att, device=device, dtype=dtype))
-            self.r_k.copy_(torch.zeros(n_head,hidden_size_att, device=device, dtype=dtype))
+            self.r_k.copy_(torch.zeros(n_head,head_size, device=device, dtype=dtype))
             
         self.receptance.reset_parameters()
         self.key.reset_parameters()
