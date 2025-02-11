@@ -258,7 +258,7 @@ class RWKV7TimeMix(torch.nn.Module):
         xx = dxprev
 
         r = self.receptance(xr)
-        w = torch.tanh(xw @ self.w1) @ self.w2
+        w = (torch.tanh(xw @ self.w1) @ self.w2).float()
         k = self.key(xk)
         v = self.value(xv)
         g = torch.sigmoid(xg @ self.g1) @ self.g2
