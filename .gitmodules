@@ -1,0 +1,4 @@
+[submodule "test"]
+	path = test
+	url = https://github.com/RWKV/RWKV-block.git
+	branch = main-test-notebook
