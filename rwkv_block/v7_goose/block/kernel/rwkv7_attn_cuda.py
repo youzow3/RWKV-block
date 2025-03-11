@@ -1,5 +1,5 @@
 import torch, os, time
-from .rwkv7_attn_pytorch import rwkv7_attn_pytorch_chunk
+from .rwkv7_attn_pytorch import rwkv7_attn_pytorch_chunk, rwkv7_attn_pytorch_ref_fp32
 
 ####################################################################################################
 # Stateless reference implementation
@@ -14,6 +14,8 @@ def load_ref_wkv_cuda_kernel(CHUNK_LEN = 16, HEAD_SIZE = 64):
 
     # Check if the load_name is already loaded
     if load_name in torch.ops:
+        if torch.ops.wind_backstepping._head_size != HEAD_SIZE:
+            raise ValueError(f"Loaded kernel has different head size {torch.ops.wind_backstepping._head_size} than expected {HEAD_SIZE} - we currently do not support multiple head sizes in the same process")
         return torch.ops.wind_backstepping
 
     # Logging of warning usage for reference implementation
@@ -37,6 +39,9 @@ def load_ref_wkv_cuda_kernel(CHUNK_LEN = 16, HEAD_SIZE = 64):
         print("[WARNING] Failed to load the kernel, trying again (sometimes the compiler has wierd race condition)...")
         time.sleep(2) # Somehow this works, with minor compilation error, that passes on subsequent reruns
         load(name=load_name, sources=[f'{this_file_path}/cuda/{load_file}_cuda.cu', f'{this_file_path}/cuda/{load_file}_op.cpp'], is_python_module=False, verbose=True, extra_cuda_cflags=flags)
+
+    # Save the head size (for error checking)
+    torch.ops.wind_backstepping._head_size = HEAD_SIZE
 
     # Return the loaded kernel
     return torch.ops.wind_backstepping
@@ -74,6 +79,11 @@ class RefCudaWindBackstepping(torch.autograd.Function):
 
 @torch.compiler.disable()
 def rwkv7_attn_cuda_ref(q,w,k,v, kk,iclr, HEAD_SIZE=64, s0=None):
+    q,w,k,v, kk,iclr = [i.bfloat16().contiguous() for i in [q,w,k,v,kk,iclr]]
+    return rwkv7_attn_cuda_ref_no_compile(q,w,k,v, kk,iclr, HEAD_SIZE, s0)
+
+@torch.compiler.disable()
+def rwkv7_attn_cuda_ref_no_compile(q,w,k,v, kk,iclr, HEAD_SIZE=64, s0=None):
     # Preload the kernel
     load_ref_wkv_cuda_kernel()
 
@@ -87,6 +97,7 @@ def rwkv7_attn_cuda_ref(q,w,k,v, kk,iclr, HEAD_SIZE=64, s0=None):
 
     # Initialize the state, if not provided - for compatibility (THE STATE IS NOT UPDATED)
     s0 = torch.zeros(B,H,C,C, dtype=torch.float,device=w.device) if s0 is None else s0
+    s0 = s0.contiguous()
     
     # Handling the cuda kernel
     q,w,k,v,a,b = [i.view(B,T,H,C).contiguous() for i in [q,w,k,v,(-kk),(kk*iclr)]]
@@ -108,6 +119,8 @@ def load_wkv_cuda_kernel(CHUNK_LEN = 16, HEAD_SIZE = 64):
 
     # Check if the load_name is already loaded
     if load_name in torch.ops:
+        if torch.ops.state_wind_backstepping._head_size != HEAD_SIZE:
+            raise ValueError(f"Loaded kernel has different head size {torch.ops.state_wind_backstepping._head_size} than expected {HEAD_SIZE} - we currently do not support multiple head sizes in the same process")
         return torch.ops.state_wind_backstepping
     
     # Get the this script file path, to cmpute the cuda path
@@ -122,6 +135,9 @@ def load_wkv_cuda_kernel(CHUNK_LEN = 16, HEAD_SIZE = 64):
         print("[WARNING] Failed to load the kernel, trying again (sometimes the compiler has wierd race condition)...")
         time.sleep(2) # Somehow this works, with minor compilation error, that passes on subsequent reruns
         load(name=load_name, sources=[f'{this_file_path}/cuda/{load_file}_cuda.cu', f'{this_file_path}/cuda/{load_file}_op.cpp'], is_python_module=False, verbose=True, extra_cuda_cflags=flags)
+
+    # Save the head size (for error checking)
+    torch.ops.state_wind_backstepping._head_size = HEAD_SIZE
 
     # Return the loaded kernel
     return torch.ops.state_wind_backstepping
@@ -158,10 +174,15 @@ class CudaWindBackstepping(torch.autograd.Function):
         wkv_cuda_backward(state, w,q,k,v,z,b, dy,s,sa, dw,dq,dk,dv,dz,db)
         return dS0,dw,dq,dk,dv,dz,db
 
-@torch.compiler.disable()
 def rwkv7_attn_cuda(r,w,k,v, kk,iclr, HEAD_SIZE=64, s0=None):
+    r,w,k,v, kk,iclr = [i.bfloat16().contiguous() for i in [r,w,k,v,kk,iclr]]
+    s0 = s0.float().contiguous() if s0 is not None else None
+    return rwkv7_attn_cuda_no_compile(r,w,k,v, kk,iclr, HEAD_SIZE, s0)
+
+@torch.compiler.disable()
+def rwkv7_attn_cuda_no_compile(r,w,k,v, kk,iclr, HEAD_SIZE=64, s0=None):
     # Preload the kernel
-    load_wkv_cuda_kernel()
+    load_wkv_cuda_kernel(HEAD_SIZE=HEAD_SIZE)
 
     # Get the shape
     B,T,HC = w.shape
@@ -175,7 +196,26 @@ def rwkv7_attn_cuda(r,w,k,v, kk,iclr, HEAD_SIZE=64, s0=None):
 
     # Initialize the state
     s0 = torch.zeros(B,H,C,C, dtype=torch.float,device=w.device) if s0 is None else s0
-    sT = s0.to(dtype=torch.float)
+    sT = s0.to(dtype=torch.float).contiguous()
+
+    # If its smaller then a chunk, use the pytorch implementation
+    if T < 16: 
+        chunk_xx, chunk_sT = rwkv7_attn_pytorch_chunk(
+            r,(-w.float().exp()).exp(),
+            k,v, 
+            kk,iclr, 
+            B, T, H, C, 
+            torch.empty(B, T, HC, device=w.device, dtype=w.dtype),
+            sT
+        )
+        # chunk_xx, chunk_sT = rwkv7_attn_pytorch_ref_fp32(
+        #     r,w,k,v, 
+        #     kk,iclr, 
+        #     B, T, H, C, 
+        #     torch.empty(B, T, HC, device=w.device, dtype=w.dtype),
+        #     sT
+        # )
+        return chunk_xx, chunk_sT.to(dtype=s0.dtype)
 
     # Optimize the call, if chunk is multiple of 16
     if chunk_remainder == 0:
@@ -193,12 +233,22 @@ def rwkv7_attn_cuda(r,w,k,v, kk,iclr, HEAD_SIZE=64, s0=None):
     )
 
     # Get the remainder
+    # ---
     remain_xx, last_sT = rwkv7_attn_pytorch_chunk(
-        r[:,si:],torch.exp(-torch.exp(w[:,si:])),k[:,si:],v[:,si:], kk[:,si:],iclr[:,si:], 
-        B, H, C, 
+        r[:,si:],(-w[:,si:].float().exp()).exp(),
+        k[:,si:],v[:,si:], 
+        kk[:,si:],iclr[:,si:], 
+        B, chunk_remainder, H, C, 
         torch.zeros(B, chunk_remainder, HC, device=w.device, dtype=w.dtype), 
-        chunk_sT, chunk_size=chunk_remainder
-    )
+        chunk_sT
+    ) 
+    # remain_xx, last_sT = rwkv7_attn_pytorch_ref_fp32(
+    #     r[:,si:],w[:,si:],k[:,si:],v[:,si:], 
+    #     kk[:,si:],iclr[:,si:], 
+    #     B, chunk_remainder, H, C, 
+    #     torch.empty(B, chunk_remainder, HC, device=w.device, dtype=w.dtype), 
+    #     chunk_sT
+    # )
 
     # Concatenate and return results
     return torch.cat([chunk_xx.to(dtype=w.dtype), remain_xx.to(dtype=w.dtype)], dim=1), last_sT.to(dtype=s0.dtype)
@@ -214,13 +264,13 @@ def rwkv7_attn_cuda_chunk(r,w,k,v, kk,iclr, HEAD_SIZE=64, s0=None):
     H = HC//C
 
     # Handling the cuda kernel
-    a,b = -kk, (kk*iclr)
-    r,w,k,v,a,b = [i.view(B,T,H,C).contiguous() for i in [r,w,k,v,a,b]]
+    a,b = -kk, (kk.to(dtype=iclr.dtype)*iclr)
+    r,w,k,v,a,b = [i.view(B,T,H,C).bfloat16().contiguous() for i in [r,w,k,v,a,b]]
 
     if s0 is None:
         s1 = torch.zeros(B,H,C,C, dtype=torch.float,device=w.device).contiguous()
     else:
-        s1 = s0.clone().contiguous()
+        s1 = s0.float().clone().contiguous()
 
     # Forward with backprop
     xx = CudaWindBackstepping.apply(s1,w,r,k,v,a,b)

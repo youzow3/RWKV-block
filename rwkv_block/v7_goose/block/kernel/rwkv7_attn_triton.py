@@ -27,8 +27,8 @@ def IND5(a,b,c,d,e,nb,nc,nd,ne):
 @triton.jit
 def _prod(a,b): return a*b
 
-@triton.jit
-def _sum(a,b): return a+b
+# @triton.jit
+# def _sum(a,b): return a+b
 
 # inv(I-A) where A is a strictly lower triangular nxn matrix
 @triton.jit
@@ -70,16 +70,16 @@ def fw_attn_triton(w_,q_,k_,v_,a_,b_, s0_,y_,s_,sT_, B:tl.constexpr,T:tl.constex
         sa = tl.load(a_+IND4(bi,t,hi,i, T,H,C)).to(tl.float32)
         sb = tl.load(b_+IND4(bi,t,hi,i, T,H,C)).to(tl.float32)
 
-        # w = (-sw.exp()).exp()
-        # fw = tl.reduce(w, 0, _prod, keep_dims=True)
-        # incl_pref = tl.cumprod(w,axis=0)
-        # non_incl_pref = incl_pref / w
-        # inv_incl_pref = 1 / incl_pref
-        w = (-sw.exp())
-        fw = tl.reduce(w, 0, _sum, keep_dims=True).exp()
-        incl_pref = tl.cumsum(w,axis=0).exp()
-        non_incl_pref = incl_pref / w.exp()
+        w = (-sw.exp()).exp()
+        fw = tl.reduce(w, 0, _prod, keep_dims=True)
+        incl_pref = tl.cumprod(w,axis=0)
+        non_incl_pref = incl_pref / w
         inv_incl_pref = 1 / incl_pref
+        # w = (-sw.exp())
+        # fw = tl.reduce(w, 0, _sum, keep_dims=True).exp()
+        # incl_pref = tl.cumsum(w,axis=0).exp()
+        # non_incl_pref = incl_pref / w.exp()
+        # inv_incl_pref = 1 / incl_pref
 
         wq = sq * incl_pref
         wa = sa * non_incl_pref
@@ -242,16 +242,16 @@ def fw_attn_triton_bighead(w_,q_,k_,v_,a_,b_, s0_,y_,s_,sT_, wq_,wa_,kwi_,bwi_,f
             sa = tl.load(a_+IND4(bi,t,hi,j, T,H,C)).to(tl.float32)
             sb = tl.load(b_+IND4(bi,t,hi,j, T,H,C)).to(tl.float32)
 
-            # w = (-sw.exp()).exp()
-            # fw = tl.reduce(w, 0, _prod, keep_dims=True)
-            # incl_pref = tl.cumprod(w,axis=0)
-            # non_incl_pref = incl_pref / w
-            # inv_incl_pref = 1 / incl_pref
-            w = (-sw.exp())
-            fw = tl.reduce(w, 0, _sum, keep_dims=True).exp()
-            incl_pref = tl.cumsum(w,axis=0).exp()
-            non_incl_pref = incl_pref / w.exp()
+            w = (-sw.exp()).exp()
+            fw = tl.reduce(w, 0, _prod, keep_dims=True)
+            incl_pref = tl.cumprod(w,axis=0)
+            non_incl_pref = incl_pref / w
             inv_incl_pref = 1 / incl_pref
+            # w = (-sw.exp())
+            # fw = tl.reduce(w, 0, _sum, keep_dims=True).exp()
+            # incl_pref = tl.cumsum(w,axis=0).exp()
+            # non_incl_pref = incl_pref / w.exp()
+            # inv_incl_pref = 1 / incl_pref
 
             wq = sq * incl_pref
             wa = sa * non_incl_pref
@@ -354,16 +354,16 @@ def bw_attn_triton_bighead(w_,q_,k_,v_,a_,b_, dy_,s_,dsT_,ds_, dw_,dq_,dk_,dv_,d
             sa = tl.load(a_+IND4(bi,t,hi,j, T,H,C)).to(tl.float32)
             sb = tl.load(b_+IND4(bi,t,hi,j, T,H,C)).to(tl.float32)
 
-            # w = (-sw.exp()).exp()
-            # fw = tl.reduce(w, 0, _prod, keep_dims=True)
-            # incl_pref = tl.cumprod(w,axis=0)
-            # non_incl_pref = incl_pref / w
-            # inv_incl_pref = 1 / incl_pref
-            w = (-sw.exp())
-            fw = tl.reduce(w, 0, _sum, keep_dims=True).exp()
-            incl_pref = tl.cumsum(w,axis=0).exp()
-            non_incl_pref = incl_pref / w.exp()
+            w = (-sw.exp()).exp()
+            fw = tl.reduce(w, 0, _prod, keep_dims=True)
+            incl_pref = tl.cumprod(w,axis=0)
+            non_incl_pref = incl_pref / w
             inv_incl_pref = 1 / incl_pref
+            # w = (-sw.exp())
+            # fw = tl.reduce(w, 0, _sum, keep_dims=True).exp()
+            # incl_pref = tl.cumsum(w,axis=0).exp()
+            # non_incl_pref = incl_pref / w.exp()
+            # inv_incl_pref = 1 / incl_pref
 
             wq = sq * incl_pref
             wa = sa * non_incl_pref
@@ -490,15 +490,15 @@ def bw_attn_triton_bighead(w_,q_,k_,v_,a_,b_, dy_,s_,dsT_,ds_, dw_,dq_,dk_,dv_,d
 
             sw = tl.load(w_+IND4(bi,t,hi,j, T,H,C)).to(tl.float32)
 
-            # w = (-sw.exp()).exp()
-            # incl_pref = tl.cumprod(w,axis=0)
-            # non_incl_pref = incl_pref / w
-            # inv_incl_pref = 1 / incl_pref
-            w = (-sw.exp())
-            # fw = tl.reduce(w, 0, _sum, keep_dims=True).exp()
-            incl_pref = tl.cumsum(w,axis=0).exp()
-            non_incl_pref = incl_pref / w.exp()
+            w = (-sw.exp()).exp()
+            incl_pref = tl.cumprod(w,axis=0)
+            non_incl_pref = incl_pref / w
             inv_incl_pref = 1 / incl_pref
+            # w = (-sw.exp())
+            # # fw = tl.reduce(w, 0, _sum, keep_dims=True).exp()
+            # incl_pref = tl.cumsum(w,axis=0).exp()
+            # non_incl_pref = incl_pref / w.exp()
+            # inv_incl_pref = 1 / incl_pref
 
             bwi = tl.load(bwi_+IND4(bi,hi,dt,j, H,dT,C)).to(tl.float32)
             kwi = tl.load(kwi_+IND4(bi,hi,dt,j, H,dT,C)).to(tl.float32)
@@ -561,7 +561,7 @@ class TritonBigheadRWKV7(th.autograd.Function):
 # Start of pytorch code
 ####################################################################################################
 
-from .rwkv7_attn_pytorch import rwkv7_attn_pytorch_chunk
+from .rwkv7_attn_pytorch import rwkv7_attn_pytorch_chunk, rwkv7_attn_pytorch_ref_fp32
 
 # -------------------------
 # Pytorch "smallhead" code
@@ -573,15 +573,37 @@ def rwkv7_attn_triton(r,w,k,v, kk,iclr, HEAD_SIZE=64, dot_prec='fp32', s0=None):
     # Check if the chunk is multiple of 16
     chunk_remainder = T % 16
 
-    # Optimize the call, if chunk is multiple of 16
-    if chunk_remainder == 0:
-        return rwkv7_attn_triton_chunk(r,w,k,v, kk,iclr, HEAD_SIZE, dot_prec, s0)
-
     # Initialize the state
     C = HEAD_SIZE
     H = HC//C
-    s0 = th.zeros(B,H,C,C, dtype=th.float,device=w.device) if s0 is None else s0
 
+    # Initialize the state
+    s0 = th.zeros(B,H,C,C, dtype=th.float,device=w.device) if s0 is None else s0
+    sT = s0.to(dtype=torch.float).contiguous()
+
+    # If its smaller then a chunk, use the pytorch implementation
+    if T < 16:
+        chunk_xx, chunk_sT = rwkv7_attn_pytorch_chunk(
+            r,(-w.float().exp()).exp(),
+            k,v, 
+            kk,iclr, 
+            B, T, H, C, 
+            torch.empty(B, T, HC, device=w.device, dtype=w.dtype),
+            sT
+        )
+        # chunk_xx, chunk_sT = rwkv7_attn_pytorch_ref_fp32(
+        #     r,w,k,v, 
+        #     kk,iclr, 
+        #     B, T, H, C, 
+        #     torch.empty(B, T, HC, device=w.device, dtype=w.dtype),
+        #     sT
+        # )
+        return chunk_xx, chunk_sT.to(dtype=s0.dtype)
+
+    # Optimize the call, if chunk is multiple of 16
+    if chunk_remainder == 0:
+        return rwkv7_attn_triton_chunk(r,w,k,v, kk,iclr, HEAD_SIZE, dot_prec, s0)
+    
     # Compute the number of chunks
     chunks = T // 16
     si = chunks * 16
@@ -589,15 +611,26 @@ def rwkv7_attn_triton(r,w,k,v, kk,iclr, HEAD_SIZE=64, dot_prec='fp32', s0=None):
     # Get the chunked output
     chunk_xx, chunk_sT = rwkv7_attn_triton_chunk(
         r[:,:si],w[:,:si],k[:,:si],v[:,:si], kk[:,:si],iclr[:,:si],
-        HEAD_SIZE, dot_prec, s0
+        HEAD_SIZE, dot_prec, sT
     )
 
     # Get the remainder
+    # ---
     remain_xx, last_sT = rwkv7_attn_pytorch_chunk(
-        r[:,si:],torch.exp(-torch.exp(w[:,si:])),k[:,si:],v[:,si:], kk[:,si:],iclr[:,si:], 
-        B, H, C, torch.zeros(B, chunk_remainder, HC, device=w.device, dtype=w.dtype), 
-        chunk_sT, chunk_size=chunk_remainder
-    )
+        r[:,si:],(-w[:,si:].float().exp()).exp(),
+        k[:,si:],v[:,si:], 
+        kk[:,si:],iclr[:,si:], 
+        B, chunk_remainder, H, C, 
+        torch.empty(B, chunk_remainder, HC, device=w.device, dtype=w.dtype), 
+        chunk_sT
+    ) 
+    # remain_xx, last_sT = rwkv7_attn_pytorch_ref_fp32(
+    #     r[:,si:],w[:,si:],k[:,si:],v[:,si:], 
+    #     kk[:,si:],iclr[:,si:], 
+    #     B, chunk_remainder, H, C, 
+    #     torch.empty(B, chunk_remainder, HC, device=w.device, dtype=w.dtype), 
+    #     chunk_sT
+    # )
 
     # Concatenate and return results
     return torch.cat([chunk_xx.to(dtype=w.dtype), remain_xx.to(dtype=w.dtype)], dim=1), last_sT.to(dtype=s0.dtype)
@@ -628,10 +661,37 @@ def rwkv7_attn_triton_bighead(r,w,k,v, kk,iclr, HEAD_SIZE=64, dot_prec='fp32', s
     # Check if the chunk is multiple of 16
     chunk_remainder = T % 16
 
+    # Initialize the state
+    C = HEAD_SIZE
+    H = HC//C
+
+    # Initialize the state
+    s0 = th.zeros(B,H,C,C, dtype=th.float,device=w.device) if s0 is None else s0
+    sT = s0.to(dtype=torch.float).contiguous()
+
+    # If its smaller then a chunk, use the pytorch implementation
+    if T < 16: 
+        chunk_xx, chunk_sT = rwkv7_attn_pytorch_chunk(
+            r,(-w.float().exp()).exp(),
+            k,v, 
+            kk,iclr, 
+            B, T, H, C, 
+            torch.empty(B, T, HC, device=w.device, dtype=w.dtype),
+            sT
+        )
+        # chunk_xx, chunk_sT = rwkv7_attn_pytorch_ref_fp32(
+        #     r,w,k,v, 
+        #     kk,iclr, 
+        #     B, T, H, C, 
+        #     torch.empty(B, T, HC, device=w.device, dtype=w.dtype),
+        #     sT
+        # )
+        return chunk_xx, chunk_sT.to(dtype=s0.dtype)
+
     # Optimize the call, if chunk is multiple of 16
     if chunk_remainder == 0:
-        return rwkv7_attn_triton_bighead_chunk(r,w,k,v, kk,iclr, HEAD_SIZE, dot_prec, s0)
-
+        return rwkv7_attn_triton_bighead_chunk(r,w,k,v, kk,iclr, HEAD_SIZE, dot_prec, sT)
+    
     # Initialize the state
     C = HEAD_SIZE
     H = HC//C
@@ -648,11 +708,22 @@ def rwkv7_attn_triton_bighead(r,w,k,v, kk,iclr, HEAD_SIZE=64, dot_prec='fp32', s
     )
 
     # Get the remainder
+    # ---
     remain_xx, last_sT = rwkv7_attn_pytorch_chunk(
-        r[:,si:],torch.exp(-torch.exp(w[:,si:])),k[:,si:],v[:,si:], kk[:,si:],iclr[:,si:], 
-        B, H, C, torch.zeros(B, chunk_remainder, HC, device=w.device, dtype=w.dtype), 
-        chunk_sT, chunk_size=chunk_remainder
-    )
+        r[:,si:],(-w[:,si:].float().exp()).exp(),
+        k[:,si:],v[:,si:], 
+        kk[:,si:],iclr[:,si:], 
+        B, chunk_remainder, H, C, 
+        torch.zeros(B, chunk_remainder, HC, device=w.device, dtype=w.dtype), 
+        chunk_sT
+    ) 
+    # remain_xx, last_sT = rwkv7_attn_pytorch_ref_fp32(
+    #     r[:,si:],w[:,si:],k[:,si:],v[:,si:], 
+    #     kk[:,si:],iclr[:,si:], 
+    #     B, chunk_remainder, H, C, 
+    #     torch.empty(B, chunk_remainder, HC, device=w.device, dtype=w.dtype), 
+    #     chunk_sT
+    # )
 
     # Concatenate and return results
     return torch.cat([chunk_xx.to(dtype=w.dtype), remain_xx.to(dtype=w.dtype)], dim=1), last_sT.to(dtype=s0.dtype)
