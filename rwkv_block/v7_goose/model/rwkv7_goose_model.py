@@ -28,6 +28,9 @@ class RWKV7GooseModel(nn.Module):
         hidden_size = configMap.hidden_size
         head_size = configMap.head_size
 
+        # Checkpoint function hook
+        self.checkpoint_function = None
+
         # Embedding layer
         self.emb = nn.Embedding(vocab_size, hidden_size, device=device, dtype=dtype)
 
@@ -105,6 +108,18 @@ class RWKV7GooseModel(nn.Module):
             for i in range(self.configMap.num_hidden_layers):
                 if 'init_state.'+str(i)+'.wkv' in state_dict:
                     self.init_state[i]["wkv"].data.copy_(state_dict['init_state.'+str(i)+'.wkv'], non_blocking=True)
+
+    ### ---
+    ###
+    ### Custom hook overwrites
+    ###
+    ### ---
+
+    def setup_checkpoint_function(self, checkpoint_function):
+        '''
+        Configure the checkpoint function, to be used by the model
+        '''
+        self.checkpoint_function = checkpoint_function
 
     ### ---
     ###
@@ -187,6 +202,9 @@ class RWKV7GooseModel(nn.Module):
         To implement gradient checkpointing for use in various trainers
         '''
         x_hidden_state = x_hidden_state.to(block.ln1.weight.device, non_blocking=True)
+        if self.checkpoint_function is not None:
+            # Use checkpointing if available
+            return self.checkpoint_function(block, x_hidden_state, prv_stateList, v_first)
         return block(x_hidden_state, prv_stateList, v_first)
 
     def _forward_internal(
