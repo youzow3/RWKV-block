@@ -102,6 +102,7 @@ class RWKV7Config(PretrainedConfig):
         bos_token_id=0,
         eos_token_id=0,
         tie_word_embeddings=False,
+        use_bfloat16=True,
         ########################################
         **kwargs,
     ):
@@ -131,6 +132,7 @@ class RWKV7Config(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings, 
             bos_token_id=bos_token_id, 
             eos_token_id=eos_token_id, 
+            use_bfloat16=use_bfloat16,
             **kwargs
         )
 

@@ -87,7 +87,7 @@ class RWKV7State(Cache):
 
     def crop(self, max_length: int):
         # can't implement this for linear attention variants, skips
-        return
+        raise NotImplementedError('Cannot crop Linear Attention state')
 
     @torch.no_grad
     def update(
@@ -147,6 +147,7 @@ class RWKV7PreTrainedModel(PreTrainedModel):
     gradient_checkpointing = True
 
     def __init__(self, config: RWKV7Config=None):
+        # Work around for multiple inheritance
         if config is None and self.config is not None:
             config = self.config
         else:
