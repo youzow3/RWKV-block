@@ -600,9 +600,12 @@ class RWKV7ForCausalLM(RWKV7Model, GenerationMixin):
             input_ids = input_ids[:, -num_new_tokens:]
             model_kwargs["input_ids"] = input_ids
 
-            if attention_mask is not None:
-                attention_mask = attention_mask.new_ones((attention_mask.shape[0], num_new_tokens))
-                model_kwargs["attention_mask"] = attention_mask
+            # @TODO: Proper support for attention masking
+            # ---
+            # if attention_mask is not None:
+            #     attention_mask = attention_mask.new_ones((attention_mask.shape[0], num_new_tokens))
+            #     model_kwargs["attention_mask"] = attention_mask
+            model_kwargs["attention_mask"] = None
 
         # Return the formated output
         return model_kwargs
@@ -679,12 +682,22 @@ class RWKV7ForCausalLM(RWKV7Model, GenerationMixin):
             shift_labels = labels[..., 1:].contiguous()
             # Compute the token loss
 
-            if attention_mask is not None:
-                token_loss = F.cross_entropy(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1), reduction="none")
-                submask = attention_mask[..., 1:].contiguous().view(-1)
-                loss = (token_loss * submask).sum() / submask.sum()
+            # @TODO: Proper attention mask support
+            attention_mask = None
+
+            # if no attention mask, just use cross entropy
+            if attention_mask is None:
+                loss = F.cross_entropy(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1), reduction="mean")
             else:
-                loss = F.cross_entropy(shift_logits.view(-1, shift_labels.size(-1)), shift_labels.view(-1), reduction="mean")
+                token_loss = F.cross_entropy(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1), reduction="none")
+
+                # If attention mask is < that sequence length, use it, partially
+                if attention_mask.size(-1) < shift_labels.size(-1):
+                    submask = attention_mask.contiguous().view(-1)
+                    loss = (token_loss[..., -shift_labels.size(-1):] * submask).sum() / submask.sum()
+                else:
+                    submask = attention_mask[..., -shift_labels.size(-1):].contiguous().view(-1)
+                    loss = (token_loss * submask).sum() / submask.sum()
 
         if not return_dict:
             return tuple(i for i in [loss, logits, rwkv_state, all_hidden_states, all_attns] if i is not None)
