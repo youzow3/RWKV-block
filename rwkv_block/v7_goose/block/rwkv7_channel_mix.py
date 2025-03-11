@@ -32,9 +32,10 @@ class RWKV7ChannelMix(torch.nn.Module):
         
         # Build the various params
         # ---
-        self.x_k = nn.Parameter(torch.empty(1, 1, hidden_size, device=device, dtype=dtype))
-        self.key = nn.Linear(hidden_size, hidden_size_ffn, bias=False, device=device, dtype=dtype)
-        self.value = nn.Linear(hidden_size_ffn, hidden_size, bias=False, device=device, dtype=dtype)
+        with torch.device(device):
+            self.x_k = nn.Parameter(torch.empty(1, 1, hidden_size, dtype=dtype))
+            self.key = nn.Linear(hidden_size, hidden_size_ffn, bias=False, dtype=dtype)
+            self.value = nn.Linear(hidden_size_ffn, hidden_size, bias=False, dtype=dtype)
 
     def reset_parameters(self):
         '''
@@ -63,7 +64,7 @@ class RWKV7ChannelMix(torch.nn.Module):
         self.key.reset_parameters()
         self.value.reset_parameters()
 
-    def forward(self, x: torch.Tensor, last_state: torch.Tensor) -> tuple[torch.Tensor,torch.Tensor]:
+    def forward(self, x: torch.Tensor, last_state: torch.Tensor=None) -> tuple[torch.Tensor,torch.Tensor]:
         '''
         Forwarding channel mix given the input tokens and states.
         
@@ -75,7 +76,11 @@ class RWKV7ChannelMix(torch.nn.Module):
         - Output embedding of shape [batch_size, seq_len, embedding_size]
         - Output channel mix, shift state of shape [batch_size, state_size]
         '''
-        # last_state = last_state.to(self.key.weight.device)
+
+        if last_state is None:
+            last_state = torch.zeros(x.shape[0], x.shape[2], device=x.device, dtype=x.dtype)
+        # else:
+        #     last_state = last_state.to(self.key.weight.device)
 
         ##########
         ## x070

@@ -10,7 +10,7 @@ def rwkv7_attn_fla(
     log_w = -w.float().exp()
 
     # Run the FLA
-    output, vk_state = chunk_rwkv7(r=r, log_w=log_w, k=k, v=v, a=a, b=b, initial_state=wkv_state_in.float(), output_final_state=True)
+    output, vk_state = chunk_rwkv7(r, log_w, k, v, a, b, initial_state=wkv_state_in.float(), output_final_state=True)
     return output, vk_state.to(dtype=wkv_state_in.dtype)
 
 def rwkv7_attn_fused_reccurent_fla(
@@ -25,5 +25,5 @@ def rwkv7_attn_fused_reccurent_fla(
     log_w = -w.float().exp()
 
     # Run the FLA
-    output, vk_state = fused_recurrent_rwkv7(r=r, log_w=log_w, k=k, v=v, a=a, b=b, initial_state=wkv_state_in.float(), output_final_state=True)
+    output, vk_state = fused_recurrent_rwkv7(r, log_w, k, v, a, b, initial_state=wkv_state_in.float(), output_final_state=True)
     return output, vk_state.to(dtype=wkv_state_in.dtype)
