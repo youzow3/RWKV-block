@@ -39,7 +39,7 @@ class RWKV5EagleModel(nn.Module):
         self.head = nn.Linear(hidden_size, vocab_size, bias=False, device=device, dtype=dtype)
 
         # init state tuning support
-        if configMap.init_state_wkv:
+        if configMap.init_wkv_state:
             stateTuneList = [None]*num_hidden_layers
             for i in range(num_hidden_layers):
                 stateTuneList[i] = nn.ParameterDict({
@@ -72,7 +72,7 @@ class RWKV5EagleModel(nn.Module):
         '''
         # Get required configs
         hidden_size = self.configMap.hidden_size
-        init_state_wkv = self.configMap.init_state_wkv
+        init_wkv_state = self.configMap.init_wkv_state
         num_hidden_layers = self.configMap.num_hidden_layers
 
         # Prepare the initial state
@@ -83,7 +83,7 @@ class RWKV5EagleModel(nn.Module):
 
             # Use the saved init_state if enabled
             wkv_state = torch.zeros(batch_size, hidden_size // 64, 64, 64, device=device, dtype=dtype)
-            if init_state_wkv and skip_init_state == False:
+            if init_wkv_state and skip_init_state == False:
                 init_wkv = self.init_state[i]["wkv"]
                 for b in range(batch_size):
                     wkv_state[b][:] = init_wkv

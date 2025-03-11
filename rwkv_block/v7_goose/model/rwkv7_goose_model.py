@@ -45,7 +45,7 @@ class RWKV7GooseModel(nn.Module):
         self.head = nn.Linear(hidden_size, vocab_size, bias=False, device=device, dtype=dtype)
 
         # init state tuning support
-        if configMap.init_state_wkv:
+        if configMap.init_wkv_state:
             stateTuneList = [None]*num_hidden_layers
             for i in range(num_hidden_layers):
                 stateTuneList[i] = nn.ParameterDict({
@@ -79,7 +79,7 @@ class RWKV7GooseModel(nn.Module):
             self.head.reset_parameters()
 
         # Reinit the init state tuning support
-        if configMap.init_state_wkv:
+        if configMap.init_wkv_state:
             if self.init_state is None:
                 stateTuneList = [None]*num_hidden_layers
                 for i in range(num_hidden_layers):
@@ -104,7 +104,7 @@ class RWKV7GooseModel(nn.Module):
         self.head.weight.data.copy_(state_dict['head.weight'], non_blocking=True)
         self.emb.weight.data.copy_(state_dict['emb.weight'], non_blocking=True)
 
-        if self.configMap.init_state_wkv:
+        if self.configMap.init_wkv_state:
             for i in range(self.configMap.num_hidden_layers):
                 if 'init_state.'+str(i)+'.wkv' in state_dict:
                     self.init_state[i]["wkv"].data.copy_(state_dict['init_state.'+str(i)+'.wkv'], non_blocking=True)
@@ -133,7 +133,7 @@ class RWKV7GooseModel(nn.Module):
         '''
         # Get required configs
         hidden_size = self.configMap.hidden_size
-        init_state_wkv = self.configMap.init_state_wkv
+        init_wkv_state = self.configMap.init_wkv_state
         num_hidden_layers = self.configMap.num_hidden_layers
         head_size = self.configMap.head_size
 
@@ -146,7 +146,7 @@ class RWKV7GooseModel(nn.Module):
             # Use the saved init_state if enabled
             # TODO: Consider letting the wkv_state dtype be a parameter
             wkv_state = torch.zeros(batch_size, hidden_size // head_size, head_size, head_size, device=device, dtype=torch.float)
-            if init_state_wkv and skip_init_state == False:
+            if init_wkv_state and skip_init_state == False:
                 init_wkv = self.init_state[i]["wkv"]
                 for b in range(batch_size):
                     wkv_state[b][:] = init_wkv

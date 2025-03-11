@@ -56,7 +56,7 @@ def parse_args():
     # Optional parameters
     parser.add_argument('--vocab-size', '--vocab_size', type=int, default=152064,
                       help='Size of the vocabulary')
-    parser.add_argument('--init-state-wkv', '--init_state_wkv', type=str2bool, default=False,
+    parser.add_argument('--init-state-wkv', '--init_wkv_state', type=str2bool, default=False,
                       help='Enable WKV state initialization')
     parser.add_argument('--forward-chunk-size', '--forward_chunk_size', type=int, default=4096,
                       help='Size of forward chunks for processing')
@@ -119,7 +119,7 @@ def init_model(args) -> None:
         num_hidden_layers=args.num_hidden_layers,
         hidden_size=args.hidden_size,
         vocab_size=args.vocab_size,
-        init_state_wkv=args.init_state_wkv,
+        init_wkv_state=args.init_wkv_state,
         forward_chunk_size=args.forward_chunk_size,
         padding_idx=args.padding_idx,
         num_suffix_hybrid_layers=args.num_suffix_hybrid_layers,

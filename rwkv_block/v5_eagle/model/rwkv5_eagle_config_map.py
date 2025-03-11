@@ -9,7 +9,7 @@ from ..block.rwkv5_block_config_map import RWKV5BlockConfigMap
 class RWKV5EagleConfigMap(RWKV5BlockConfigMap):
     # This is the world tokenizer size
     vocab_size: int = 65536 
-    init_state_wkv: bool = False 
+    init_wkv_state: bool = False 
 
     @staticmethod
     def normalize(config_map: any) -> 'RWKV5EagleConfigMap':
@@ -45,7 +45,7 @@ class RWKV5EagleConfigMap(RWKV5BlockConfigMap):
             num_hidden_layers=num_hidden_layers,
             hidden_size=state_dict['emb.weight'].shape[1],
             vocab_size=state_dict['emb.weight'].shape[0],
-            init_state_wkv=hasattr(state_dict, 'init_state.0.wkv'),
+            init_wkv_state=hasattr(state_dict, 'init_state.0.wkv'),
 
             n_head=state_dict['blocks.0.att.time_decay'].shape[0],
             head_size=state_dict['blocks.0.att.time_decay'].shape[1],
