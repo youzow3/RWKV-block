@@ -42,7 +42,6 @@ class Qwerky7BlockConfigMap(RWKV7BlockConfigMap):
         # self.attention_output_bias = attention_output_bias
         super().__init__(num_hidden_layers, hidden_size, head_size=head_size, **kargs)
 
-    
     def get_hidden_size_mlp(self) -> int:
         '''
         Intermidiate size of the MLP,
