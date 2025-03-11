@@ -53,6 +53,20 @@ class RWKV7GooseModel(nn.Module):
                 })
             self.init_state = nn.ParameterList(stateTuneList)
 
+            if configMap.freeze_wkv_state:
+                for i in range(num_hidden_layers):
+                    self.init_state[i]["wkv"].requires_grad = False
+
+        # Freeze full weights if needed
+        if configMap.freeze_full_weights:
+            for param in self.parameters():
+                param.requires_grad = False
+
+            if configMap.freeze_wkv_state != True:
+                for i in range(num_hidden_layers):
+                    self.init_state[i]["wkv"].requires_grad = True
+
+
     def reset_parameters(self):
         '''
         Reset the parameters of the block, to an initial state used for training a model from scratch

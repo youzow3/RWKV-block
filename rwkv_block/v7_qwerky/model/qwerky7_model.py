@@ -79,6 +79,20 @@ class Qwerky7Model(nn.Module):
                     })
                 self.init_state = nn.ParameterList(stateTuneList)
 
+                if configMap.freeze_wkv_state:
+                    for i in range(num_hidden_layers):
+                        self.init_state[i]["wkv"].requires_grad = False
+
+            # Freeze full weights if needed
+            if configMap.freeze_full_weights:
+                for param in self.parameters():
+                    param.requires_grad = False
+
+                if configMap.freeze_wkv_state != True:
+                    for i in range(num_hidden_layers):
+                        self.init_state[i]["wkv"].requires_grad = True
+
+
         # Reset the default device and dtype
         torch.set_default_device(default_device)
         torch.set_default_dtype(default_dtype)
