@@ -675,10 +675,9 @@ class Qwerky7ForCausalLM(Qwerky7PreTrainedModel, GenerationMixin):
 
             # @TODO: Proper support for attention masking
             # ---
-            # if attention_mask is not None:
-            #     attention_mask = attention_mask.new_ones((attention_mask.shape[0], num_new_tokens))
-            #     model_kwargs["attention_mask"] = attention_mask
-            model_kwargs["attention_mask"] = None
+            if attention_mask is not None:
+                attention_mask = attention_mask.new_ones((attention_mask.shape[0], num_new_tokens))
+                model_kwargs["attention_mask"] = attention_mask
 
         # Return the formated output
         return model_kwargs
@@ -753,9 +752,6 @@ class Qwerky7ForCausalLM(Qwerky7PreTrainedModel, GenerationMixin):
             shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
             # Compute the token loss
-
-            # @TODO: Proper attention mask support
-            attention_mask = None
 
             # if no attention mask, just use cross entropy
             if attention_mask is None:
