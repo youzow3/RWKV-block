@@ -70,7 +70,7 @@ class Qwerky7Model(nn.Module):
             # self.norm.weight = nn.Parameter(torch.ones(hidden_size).bfloat16().to(device)) # Annoying HF meta device bug workaround
 
             # init state tuning support (only for Qwerky layers, excluding hybrid layers)
-            if configMap.init_state_wkv:
+            if configMap.init_wkv_state:
                 n_qwerky_layers = configMap.num_qwerky_layers()
                 stateTuneList = [None]*n_qwerky_layers
                 for i in range(n_qwerky_layers):
@@ -78,6 +78,20 @@ class Qwerky7Model(nn.Module):
                         "wkv": nn.Parameter(torch.zeros(hidden_size // head_size, head_size, head_size, dtype=torch.float)),
                     })
                 self.init_state = nn.ParameterList(stateTuneList)
+
+                if configMap.freeze_wkv_state:
+                    for i in range(num_hidden_layers):
+                        self.init_state[i]["wkv"].requires_grad = False
+
+            # Freeze full weights if needed
+            if configMap.freeze_full_weights:
+                for param in self.parameters():
+                    param.requires_grad = False
+
+                if configMap.freeze_wkv_state != True:
+                    for i in range(num_hidden_layers):
+                        self.init_state[i]["wkv"].requires_grad = True
+
 
         # Reset the default device and dtype
         torch.set_default_device(default_device)
@@ -110,7 +124,7 @@ class Qwerky7Model(nn.Module):
             self.norm.weight.data.fill_(1.0)
 
             # Reinit the init state tuning support (only for Qwerky layers)
-            if configMap.init_state_wkv:
+            if configMap.init_wkv_state:
                 n_qwerky_layers = configMap.num_qwerky_layers()
                 if self.init_state is None:
                     stateTuneList = [None]*n_qwerky_layers
@@ -135,7 +149,7 @@ class Qwerky7Model(nn.Module):
         self.embed_tokens.weight.data.copy_(state_dict['model.embed_tokens.weight'], non_blocking=non_blocking)
         self.norm.weight.data.copy_(state_dict['model.norm.weight'], non_blocking=non_blocking)
         
-        if self.configMap.init_state_wkv:
+        if self.configMap.init_wkv_state:
             n_qwerky_layers = self.configMap.num_qwerky_layers()
             for i in range(n_qwerky_layers):
                 if 'model.init_state.'+str(i)+'.wkv' in state_dict:
@@ -153,7 +167,7 @@ class Qwerky7Model(nn.Module):
         '''
         # Get required configs
         hidden_size = self.configMap.hidden_size
-        init_state_wkv = self.configMap.init_state_wkv
+        init_wkv_state = self.configMap.init_wkv_state
         n_qwerky_layers = self.configMap.num_qwerky_layers()
         head_size = self.configMap.head_size
 
@@ -166,7 +180,7 @@ class Qwerky7Model(nn.Module):
             # Use the saved init_state if enabled
             # TODO: Consider letting the wkv_state dtype be a parameter
             wkv_state = torch.zeros(batch_size, hidden_size // head_size, head_size, head_size, device=device, dtype=torch.float)
-            if init_state_wkv and skip_init_state == False:
+            if init_wkv_state and skip_init_state == False:
                 init_wkv = self.init_state[i]["wkv"]
                 for b in range(batch_size):
                     wkv_state[b][:] = init_wkv

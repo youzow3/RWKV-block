@@ -20,10 +20,13 @@
 # - Load the model weights into the configured model
 # - Save the model to the output directory
 
-import argparse, shutil, json
+import argparse, shutil, json, os.path
 from pathlib import Path
 import torch
 from safetensors.torch import load_file, save_file
+import hjson
+from huggingface_hub import split_torch_state_dict_into_shards
+from safetensors.torch import save_file as safe_save_file
 
 ####
 # System path configuration
@@ -66,31 +69,74 @@ def save_model_code_to_output_dir(output_dir, model_class):
 ####
 # Script builder
 ####
-def build_rwkv_v7_goose():
+def build_v7_goose():
+    hf_script_builder(
+        target_dir=f"{current_dir}/hf_code/v7_goose",
+        source_dir=f"{current_dir}/../rwkv_block/v7_goose",
+        source_cuda_dir=f"{current_dir}/../rwkv_block/v7_goose/block/kernel/cuda",
+        build_file_order = [
+            "block/kernel/rwkv7_attn_pytorch.py",
+            "block/kernel/rwkv7_attn_cuda.py",
+            "block/kernel/rwkv7_attn_fla.py",
+            "block/kernel/rwkv7_attn_triton.py",
+            "block/rwkv7_block_config_map.py",
+            "block/rwkv7_channel_mix.py",
+            "block/rwkv7_time_mix.py",
+            "block/rwkv7_layer_block.py",
+            "model/rwkv7_goose_config_map.py",
+            "model/rwkv7_goose_model.py",
+        ],
+        build_file_name="modeling_blocks_rwkv7.py"
+    )
+
+def build_v7_qwerky():
+    hf_script_builder(
+        target_dir=f"{current_dir}/hf_code/v7_qwerky",
+        source_dir=f"{current_dir}/../rwkv_block/v7_goose",
+        source_cuda_dir=f"{current_dir}/../rwkv_block/v7_goose/block/kernel/cuda",
+        build_file_order = [
+            "block/kernel/rwkv7_attn_pytorch.py",
+            "block/kernel/rwkv7_attn_cuda.py",
+            "block/kernel/rwkv7_attn_fla.py",
+            "block/kernel/rwkv7_attn_triton.py",
+            "block/rwkv7_block_config_map.py",
+            "block/rwkv7_channel_mix.py",
+            "block/rwkv7_time_mix.py",
+            "block/rwkv7_layer_block.py",
+            # "model/rwkv7_goose_config_map.py",
+            # "model/rwkv7_goose_model.py",
+            "../v7_qwerky/block/qwerky7_block_config_map.py",
+            "../v7_qwerky/block/qwerky7_layer_block.py",
+            "../v7_qwerky/block/qwerky7_time_mix.py",
+            "../v7_qwerky/model/qwerky7_config_map.py",
+            "../v7_qwerky/model/qwerky7_model.py",
+            "../v7_qwerky/model/qwerky7_causal_lm.py",
+        ],
+        build_file_name="modeling_blocks_qwerky7.py"
+    )
+
+def hf_script_builder(
+    target_dir,
+    source_dir,
+    source_cuda_dir,
+    build_file_order: list[str],
+    build_file_name
+):
     '''
     For whatever reason, HF do not like nested python files, and require everything to be
     in the the top level directory. Somewhat. This is a hack to copy and merge all the files.
     '''
-    source_dir = Path(f"{current_dir}/../rwkv_block/v7_goose")
-    target_dir = Path(f"{current_dir}/hf_code/v7_goose")
-    target_file = Path(f"{current_dir}/hf_code/v7_goose/modeling_blocks_rwkv7.py")
+
+    # Normalize dir to Path
+    target_dir = target_dir if isinstance(target_dir, Path) else Path(target_dir)
+    source_dir = source_dir if isinstance(source_dir, Path) else Path(source_dir)
+    source_cuda_dir = source_cuda_dir if isinstance(source_cuda_dir, Path) else Path(source_cuda_dir)
+
+    # Define the target file path
+    target_file = Path(f"{target_dir}/{build_file_name}")
     
     # Copy over the cuda files
-    shutil.copytree(source_dir / "block/kernel/cuda", target_dir / "cuda", dirs_exist_ok=True)
-
-    # Compilation file order
-    build_file_order = [
-        "block/kernel/rwkv7_attn_pytorch.py",
-        "block/kernel/rwkv7_attn_cuda.py",
-        "block/kernel/rwkv7_attn_fla.py",
-        "block/kernel/rwkv7_attn_triton.py",
-        "block/rwkv7_block_config_map.py",
-        "block/rwkv7_channel_mix.py",
-        "block/rwkv7_time_mix.py",
-        "block/rwkv7_layer_block.py",
-        "model/rwkv7_goose_config_map.py",
-        "model/rwkv7_goose_model.py",
-    ]
+    shutil.copytree(source_cuda_dir, target_dir / "cuda", dirs_exist_ok=True)
 
     # Compile the files, into a single string
     compiled_code = [
@@ -189,14 +235,46 @@ def build_rwkv_v7_goose():
 ####
 # Builder scripts
 ####
+def load_hf_config(config_str):
+    """
+    Load HuggingFace config from either a JSON string or a path to a JSON file.
+    
+    Args:
+        config_str: Either a JSON string or path to JSON file
+        
+    Returns:
+        dict: Parsed config dictionary
+    """
+    try:
+        config_str = config_str.strip()
+        # Check if there is '{ .. }' in the string
+        if config_str.startswith("{") and config_str.endswith("}"):
+            return hjson.loads(config_str)
+        else:
+            return hjson.loads('{ '+config_str.replace("=", '": "')+' }')
+    except json.JSONDecodeError:
+        # If that fails, try loading as file path
+        if os.path.isfile(config_str):
+            with open(config_str) as f:
+                return json.load(f)
+        else:
+            raise ValueError(f"hf_config must be valid JSON string or path to JSON file, got: {config_str}")
+
 def hf_builder(args):
     # Print the args
     print("-----------------------------")
     print("Converting RWKV model to HuggingFace format...")
     print(f"Model Class     : {args.model_class}")
-    print(f"Model Source    : {args.model_source}")
-    print(f"Tokenizer Type  : {args.tokenizer_type}")
+    if not args.model_code_only:
+        print(f"Model Source    : {args.model_source}")
+        print(f"Tokenizer Type  : {args.tokenizer_type}")
     print(f"Output Directory: {args.output_dir}")
+    if args.hf_config:
+        print(f"HF Config      : {args.hf_config}")
+    if args.one_file_safetensor:
+        print("Using single safetensor file mode")
+    if args.model_code_only:
+        print("Model code only mode - skipping tokenizer and weights")
     print("-----------------------------")
 
     # Get the model class
@@ -205,19 +283,48 @@ def hf_builder(args):
     # Copy rwkv_block code files
     print("Building rwkv_block into HF code ...")
     if model_class == "v7_goose":
-        build_rwkv_v7_goose()
+        build_v7_goose()
+    elif model_class == "v7_qwerky":
+        build_v7_qwerky()
     else:
         raise ValueError(f"Unsupported model class: {model_class}")
+
+    # Create output directory
+    os.makedirs(args.output_dir, exist_ok=True)
+
+    # Save model code files
+    print("Saving model code files ...")
+    save_model_code_to_output_dir(args.output_dir, model_class)
+
+    # If model-code-only mode, we're done here
+    if args.model_code_only:
+        print("-----------------------------")
+        print("Successfully copied model code files")
+        print("-----------------------------")
+        return
 
     # Load model weights
     print("Loading model weights raw state ...")
     state_dict = load_model_from_filepath(args.model_source)
+    assert state_dict is not None, f"Failed to load model weights from: {args.model_source}"
+
+    # Parse HF config if provided
+    hf_config = {}
+    if args.hf_config:
+        print("Loading HF config overrides ...")
+        hf_config = load_hf_config(args.hf_config)
+        print("HF Config Overrides:")
+        print(json.dumps(hf_config, indent=2))
+        print("-----------------------------")
 
     # Load for the respective class
     print("Loading model config from weights ...")
     if model_class == "v7_goose":
         from hf_code.v7_goose.configuration_rwkv7 import RWKV7Config
-        model_config = RWKV7Config.from_model_state_dict(state_dict)
+        model_config = RWKV7Config.from_model_state_dict(state_dict, **hf_config)
+    elif model_class == "v7_qwerky":
+        from hf_code.v7_qwerky.configuration_qwerky7 import Qwerky7Config
+        model_config = Qwerky7Config.from_model_state_dict(state_dict, **hf_config)
     else:
         raise ValueError(f"Unsupported model class: {model_class}")
     
@@ -226,13 +333,8 @@ def hf_builder(args):
     print(model_config.__dict__)
     print("-----------------------------")
     
-    # Load the model class instance
-    print("Loading model class instance ...")
-    if model_class == "v7_goose":
-        from hf_code.v7_goose.modeling_rwkv7 import RWKV7Model
-        model_instance = RWKV7Model(model_config)
-    else:
-        raise ValueError(f"Unsupported model class: {model_class}")
+    # Load the model files
+    print("Checking tokenizer ...")
 
     # Deduce the tokenizer
     tokenizer_type = args.tokenizer_type
@@ -242,6 +344,8 @@ def hf_builder(args):
             tokenizer_type = "world"
         elif model_config.vocab_size >= 50304 and model_config.vocab_size <= 50432:
             tokenizer_type = "neox"
+        elif model_config.vocab_size >= 151936 and model_config.vocab_size <= 152064:
+            tokenizer_type = "qwen2"
         else:
             raise ValueError(f"Unable to detect tokenizer type for: {tokenizer_type} (vocab_size: {model_config.vocab_size})")
         
@@ -249,28 +353,84 @@ def hf_builder(args):
         print(f"Detected Tokenizer Type: {tokenizer_type}")
 
     # Load the model files
-    print("Loading model state into class ...")
-    model_instance.load_state_dict(state_dict)
+    print("Modifying model state ...")
 
-    # print("-----------------------------")
-    # print("Model Configuration:")
-    # print(model_instance.config)
+    # Removing known state dict key with issues
+    if hasattr(model_config, "v_first_with_embedding") and model_config.v_first_with_embedding is True:
+        pass
+    else:
+        rmv_state_keys = [
+            "model.layers.0.self_attn.v0",
+            "model.layers.0.self_attn.v1",
+            "model.layers.0.self_attn.v2"
+        ]
+        for key in rmv_state_keys:
+            if key in state_dict:
+                del state_dict[key]
+
     print("-----------------------------")
 
     print("Saving tokenizer files ...")
-    os.makedirs(args.output_dir, exist_ok=True)
     save_tokenizer_to_output_dir(args.output_dir, tokenizer_type)
-
-    print("Saving model code files ...")
-    save_model_code_to_output_dir(args.output_dir, model_class)
     
     print("Saving model weight files ...")
-    model_instance.save_pretrained(args.output_dir)
+
+    if args.one_file_safetensor:
+        # Save all weights in a single safetensor file
+        print("Saving all weights in a single safetensor file...")
+        path_to_weights = os.path.join(args.output_dir, "model.safetensors")
+        safe_save_file(state_dict, path_to_weights, metadata={"format": "pt"})
+        print(f"Model weights saved in {path_to_weights}")
+    else:
+        # Use sharding for large models
+        max_shard_size="5GB"
+        state_dict_split = split_torch_state_dict_into_shards(
+            state_dict, filename_pattern="model{suffix}.safetensors", max_shard_size=max_shard_size
+        )
+
+        # Save index if sharded
+        index = None
+        if state_dict_split.is_sharded:
+            index = {
+                "metadata": state_dict_split.metadata,
+                "weight_map": state_dict_split.tensor_to_filename,
+            }
+
+        # Save the model
+        filename_to_tensors = state_dict_split.filename_to_tensors.items()
+        for shard_file, tensors in filename_to_tensors:
+            shard = {}
+            for tensor in tensors:
+                shard[tensor] = state_dict[tensor].contiguous()
+                # delete reference, see https://github.com/huggingface/transformers/pull/34890
+                del state_dict[tensor]
+
+            print("- ", shard_file)
+            safe_save_file(shard, os.path.join(args.output_dir, shard_file), metadata={"format": "pt"})
+
+        if index is not None:
+            save_index_file = os.path.join(args.output_dir, "model.safetensors.index.json")
+            # Save the index as well
+            with open(save_index_file, "w", encoding="utf-8") as f:
+                content = json.dumps(index, indent=2, sort_keys=True) + "\n"
+                f.write(content)
+            print(
+                f"The model is bigger than the maximum size per checkpoint ({max_shard_size}) and is going to be "
+                f"split in {len(state_dict_split.filename_to_tensors)} checkpoint shards. You can find where each parameters has been saved in the "
+                f"index located at {save_index_file}."
+            )
+
+    del state_dict
+
+    print("Saving model config files ...")
     model_config.save_pretrained(args.output_dir)
 
     print("Patching configuration ...")
     config_json_path = Path(f"{args.output_dir}/config.json")
     config_json = json.load(config_json_path.open())
+
+    # Delete the layer_id attribute (why is this even here?)
+    del config_json["layer_id"]
 
     # Fill in the auto_map, and architecture
     if model_class == "v7_goose":
@@ -280,9 +440,13 @@ def hf_builder(args):
             "AutoModelForCausalLM": "modeling_rwkv7.RWKV7ForCausalLM"
         }
         config_json["architectures"] = ["RWKV7ForCausalLM", "RWKV7Model", "RWKV7PreTrainedModel"]
-        
-        # Delete the layer_id attribute
-        del config_json["layer_id"]
+    elif model_class == "v7_qwerky":
+        config_json["auto_map"] = {
+            "AutoConfig": "configuration_qwerky7.Qwerky7Config",
+            "AutoModel": "modeling_qwerky7.Qwerky7BaseModel",
+            "AutoModelForCausalLM": "modeling_qwerky7.Qwerky7ForCausalLM"
+        }
+        config_json["architectures"] = ["Qwerky7ForCausalLM", "Qwerky7BaseModel", "Qwerky7PreTrainedModel"]
     else:
         raise ValueError(f"Unsupported model class: {model_class}")
 
@@ -297,11 +461,19 @@ def hf_builder(args):
 
 def main():
     parser = argparse.ArgumentParser(description="Convert RWKV models to HuggingFace format")
-    parser.add_argument("model_source", help="Path to RWKV model file in .pth or .safetensors format")
+    parser.add_argument("model_source", help="Path to RWKV model file in .pth or .safetensors format", nargs='?')
     parser.add_argument("output_dir", help="Directory to output the converted HuggingFace model")
     parser.add_argument("--model_class", default="v7_goose", help="Model class (default: v7_goose)")
-    parser.add_argument("--tokenizer_type", default="auto", help="Tokenizer to use, either 'auto','world' or 'neox' (default: auto)")
+    parser.add_argument("--tokenizer_type", default="auto", help="Tokenizer to use, either 'auto','world','neox' or 'qwen2' (default: auto)")
+    parser.add_argument("--hf-config", help="HuggingFace config overrides as JSON string or path to JSON file")
+    parser.add_argument("--one-file-safetensor", action="store_true", help="Save model weights in a single safetensor file instead of sharding")
+    parser.add_argument("--model-code-only", action="store_true", help="Only copy model code files, skip tokenizer and weights")
     args = parser.parse_args()
+
+    # Validate args
+    if not args.model_code_only and args.model_source is None:
+        parser.error("model_source is required unless --model-code-only is specified")
+
     hf_builder(args)
 
 if __name__ == "__main__":

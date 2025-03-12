@@ -9,21 +9,24 @@ from ..block.rwkv7_block_config_map import RWKV7BlockConfigMap
 class RWKV7GooseConfigMap(RWKV7BlockConfigMap):
     # This is the world tokenizer size
     vocab_size: int = 65536 
-    init_state_wkv: bool = False
-    forward_chunk_size: int = 4096,
+    forward_chunk_size: int = 4096
 
+    init_wkv_state: bool      = False # Include init WKV state within the model
+    freeze_wkv_state: bool    = True  # Freeze the WKV state, require init_wkv_state=True
+    freeze_full_weights: bool = False # Freeze the model training weights
+    
     # ---
     # Initializer, with excess arg ignore
     # ---
     def __init__(
         self,
         vocab_size: int = 65536,
-        init_state_wkv: bool = False,
+        init_wkv_state: bool = False,
         forward_chunk_size: Optional[int] = 4096,
         **kwargs
     ) -> None:
         self.vocab_size = vocab_size
-        self.init_state_wkv = init_state_wkv
+        self.init_wkv_state = init_wkv_state
         self.forward_chunk_size = forward_chunk_size
         super().__init__(**kwargs)
         
@@ -58,14 +61,14 @@ class RWKV7GooseConfigMap(RWKV7BlockConfigMap):
 
         # Enable wkv_state
         if 'init_state.0.wkv' in state_dict:
-            kwargs['init_state_wkv'] = True
+            kwargs['init_wkv_state'] = True
         
         # Initialize the config map, with the configured values
         return RWKV7GooseConfigMap(
             num_hidden_layers=num_hidden_layers,
             hidden_size=state_dict['emb.weight'].shape[1],
             vocab_size=state_dict['emb.weight'].shape[0],
-            # init_state_wkv=hasattr(state_dict, 'init_state.0.wkv'),
+            # init_wkv_state=hasattr(state_dict, 'init_state.0.wkv'),
 
             # n_head=state_dict['blocks.0.att.r_k'].shape[0],
             head_size=state_dict['blocks.0.att.r_k'].shape[1],

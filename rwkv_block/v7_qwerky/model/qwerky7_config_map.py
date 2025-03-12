@@ -10,7 +10,7 @@ from transformers.models.qwen2.configuration_qwen2 import Qwen2Config
 class Qwerky7ConfigMap(Qwerky7BlockConfigMap):
     # This is the world tokenizer size
     vocab_size: int = 152064
-    init_state_wkv: bool = False
+    init_wkv_state: bool = False
     forward_chunk_size: int = 4096,
 
     # Default qwen tokenizer padding_idx
@@ -43,7 +43,7 @@ class Qwerky7ConfigMap(Qwerky7BlockConfigMap):
         num_hidden_layers: int,
         hidden_size: int,
         vocab_size: int = 152064,
-        init_state_wkv: bool = False,
+        init_wkv_state: bool = False,
         forward_chunk_size: Optional[int] = 4096,
         padding_idx: int = 151643,
         # ---
@@ -60,7 +60,7 @@ class Qwerky7ConfigMap(Qwerky7BlockConfigMap):
         **kwargs
     ) -> None:
         self.vocab_size = vocab_size
-        self.init_state_wkv = init_state_wkv
+        self.init_wkv_state = init_wkv_state
         self.forward_chunk_size = forward_chunk_size
         self.padding_idx = padding_idx
         # ---
@@ -157,7 +157,7 @@ class Qwerky7ConfigMap(Qwerky7BlockConfigMap):
 
         # Enable wkv_state
         if 'init_state.0.wkv' in state_dict:
-            kwargs['init_state_wkv'] = True
+            kwargs['init_wkv_state'] = True
 
         # Initialize the config map, with the configured values
         return Qwerky7ConfigMap(**{

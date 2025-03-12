@@ -28,6 +28,9 @@ class RWKV7GooseModel(nn.Module):
         hidden_size = configMap.hidden_size
         head_size = configMap.head_size
 
+        # Checkpoint function hook
+        self.checkpoint_function = None
+
         # Embedding layer
         self.emb = nn.Embedding(vocab_size, hidden_size, device=device, dtype=dtype)
 
@@ -42,13 +45,27 @@ class RWKV7GooseModel(nn.Module):
         self.head = nn.Linear(hidden_size, vocab_size, bias=False, device=device, dtype=dtype)
 
         # init state tuning support
-        if configMap.init_state_wkv:
+        if configMap.init_wkv_state:
             stateTuneList = [None]*num_hidden_layers
             for i in range(num_hidden_layers):
                 stateTuneList[i] = nn.ParameterDict({
                     "wkv": nn.Parameter(torch.zeros(hidden_size // head_size, head_size, head_size, device=device, dtype=dtype)),
                 })
             self.init_state = nn.ParameterList(stateTuneList)
+
+            if configMap.freeze_wkv_state:
+                for i in range(num_hidden_layers):
+                    self.init_state[i]["wkv"].requires_grad = False
+
+        # Freeze full weights if needed
+        if configMap.freeze_full_weights:
+            for param in self.parameters():
+                param.requires_grad = False
+
+            if configMap.freeze_wkv_state != True:
+                for i in range(num_hidden_layers):
+                    self.init_state[i]["wkv"].requires_grad = True
+
 
     def reset_parameters(self):
         '''
@@ -76,7 +93,7 @@ class RWKV7GooseModel(nn.Module):
             self.head.reset_parameters()
 
         # Reinit the init state tuning support
-        if configMap.init_state_wkv:
+        if configMap.init_wkv_state:
             if self.init_state is None:
                 stateTuneList = [None]*num_hidden_layers
                 for i in range(num_hidden_layers):
@@ -101,10 +118,22 @@ class RWKV7GooseModel(nn.Module):
         self.head.weight.data.copy_(state_dict['head.weight'], non_blocking=True)
         self.emb.weight.data.copy_(state_dict['emb.weight'], non_blocking=True)
 
-        if self.configMap.init_state_wkv:
+        if self.configMap.init_wkv_state:
             for i in range(self.configMap.num_hidden_layers):
                 if 'init_state.'+str(i)+'.wkv' in state_dict:
                     self.init_state[i]["wkv"].data.copy_(state_dict['init_state.'+str(i)+'.wkv'], non_blocking=True)
+
+    ### ---
+    ###
+    ### Custom hook overwrites
+    ###
+    ### ---
+
+    def setup_checkpoint_function(self, checkpoint_function):
+        '''
+        Configure the checkpoint function, to be used by the model
+        '''
+        self.checkpoint_function = checkpoint_function
 
     ### ---
     ###
@@ -118,7 +147,7 @@ class RWKV7GooseModel(nn.Module):
         '''
         # Get required configs
         hidden_size = self.configMap.hidden_size
-        init_state_wkv = self.configMap.init_state_wkv
+        init_wkv_state = self.configMap.init_wkv_state
         num_hidden_layers = self.configMap.num_hidden_layers
         head_size = self.configMap.head_size
 
@@ -131,7 +160,7 @@ class RWKV7GooseModel(nn.Module):
             # Use the saved init_state if enabled
             # TODO: Consider letting the wkv_state dtype be a parameter
             wkv_state = torch.zeros(batch_size, hidden_size // head_size, head_size, head_size, device=device, dtype=torch.float)
-            if init_state_wkv and skip_init_state == False:
+            if init_wkv_state and skip_init_state == False:
                 init_wkv = self.init_state[i]["wkv"]
                 for b in range(batch_size):
                     wkv_state[b][:] = init_wkv
@@ -187,6 +216,9 @@ class RWKV7GooseModel(nn.Module):
         To implement gradient checkpointing for use in various trainers
         '''
         x_hidden_state = x_hidden_state.to(block.ln1.weight.device, non_blocking=True)
+        if self.checkpoint_function is not None:
+            # Use checkpointing if available
+            return self.checkpoint_function(block, x_hidden_state, prv_stateList, v_first)
         return block(x_hidden_state, prv_stateList, v_first)
 
     def _forward_internal(
