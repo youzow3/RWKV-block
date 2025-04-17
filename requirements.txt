@@ -1,5 +1,7 @@
-torch>=2.5.1
+torch>=2.6
+onnx
+onnxscript
 # torchaudio
 # torchvision
 # einops
-fla @ git+https://github.com/sustcsonglin/flash-linear-attention
+flash-linear-attention @ git+https://github.com/sustcsonglin/flash-linear-attention

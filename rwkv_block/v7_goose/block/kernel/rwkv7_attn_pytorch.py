@@ -4,11 +4,12 @@ import torch
 torch.set_float32_matmul_precision('high')
 
 # Handles the RWKV v7 attention mechanic, in pure pytorch
+@torch.library.custom_op("rwkv::rwkv7_attn", mutates_args=())
 def rwkv7_attn_pytorch(
-    r,w,k,v, kk,a, 
-    BATCH_SIZE, SEQ_LEN, N_HEAD, HEAD_SIZE,
-    xx, wkv_state_in
-):
+        r: torch.Tensor,w: torch.Tensor,k: torch.Tensor,v: torch.Tensor, kk: torch.Tensor,a: torch.Tensor, 
+        BATCH_SIZE: int, SEQ_LEN: int, N_HEAD: int, HEAD_SIZE: int,
+        xx: torch.Tensor, wkv_state_in: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor]:
 
     ### Reference implement
     # return rwkv7_attn_pytorch_ref(
