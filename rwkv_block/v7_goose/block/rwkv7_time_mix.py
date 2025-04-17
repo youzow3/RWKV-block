@@ -370,7 +370,7 @@ def _run_tmix_backend(
     # 
     # This unfortunately will not work with single thread
     # multi-gpu setups. Sadly
-    if tmix_backend != "pytorch":
+    if tmix_backend != "pytorch" or tmix_backend != "onnx":
         device = r.device
         if torch.get_default_device() != device:
             torch.set_default_device(device)
@@ -404,6 +404,10 @@ def _run_tmix_backend(
         # Tweaked pytorch compile varient
         w = torch.exp(-0.606531 * torch.sigmoid(w_lora_result)) # 0.606531 = exp(-0.5)
         xx, wkv_state_out = rwkv7_attn_pytorch(r, w, k, v, kk, iclr, BATCH_SIZE, SEQ_LEN, N_HEAD, HEAD_SIZE, xx, wkv_state_in) 
+    elif tmix_backend == "onnx":
+        from .kernel.rwkv7_attn_onnx import rwkv7_attn_onnx
+        w = torch.exp(-0.606531 * torch.sigmoid(w_lora_result)) # 0.606531 = exp(-0.5)
+        xx, wkv_state_out = rwkv7_attn_onnx(r, w, k, v, kk, iclr, BATCH_SIZE, SEQ_LEN, N_HEAD, HEAD_SIZE, xx, wkv_state_in) 
     elif tmix_backend in ["triton", "triton_smallhead", "triton_small"]:
         from .kernel.rwkv7_attn_triton import rwkv7_attn_triton
         w = -F.softplus(-w_lora_result) - 0.5
